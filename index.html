@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demo QR Order - Quét mã gọi món tại bàn</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    :root {
+      --primary: #ea580c;
+      --primary-hover: #c2410c;
+      --primary-light: #fff7ed;
+      --dark: #0f172a;
+      --slate: #475569;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --green: #16a34a;
+      --blue: #2563eb;
+      --yellow: #d97706;
+      --red: #dc2626;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: var(--bg); color: var(--dark); min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* Top Navigation */
+    .topbar {
+      background: var(--dark); color: #fff; padding: 10px 16px;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+      position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+    }
+    .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
+    .brand span { background: var(--primary); padding: 4px 8px; border-radius: 6px; font-size: 13px; }
+    .nav-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+    .nav-btn {
+      background: rgba(255,255,255,0.1); color: #cbd5e1; border: none; padding: 7px 12px;
+      border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: 0.2s;
+    }
+    .nav-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
+    .nav-btn.active { background: var(--primary); color: #fff; }
+
+    /* Main Workspace */
+    .workspace { flex: 1; padding: 16px; max-width: 1440px; width: 100%; margin: 0 auto; }
+    .split-grid { display: grid; grid-template-columns: 420px 1fr; gap: 20px; align-items: start; }
+    .single-wrap { max-width: 480px; margin: 0 auto; }
+    .single-wide { max-width: 1100px; margin: 0 auto; }
+    .hidden { display: none !important; }
+
+    @media (max-width: 960px) {
+      .split-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Customer Phone Frame */
+    .phone-frame {
+      background: #fff; border-radius: 24px; border: 6px solid #1e293b;
+      overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.12);
+      display: flex; flex-direction: column; height: calc(100vh - 100px); min-height: 600px; max-height: 820px;
+      position: relative;
+    }
+    .cust-header {
+      background: linear-gradient(135deg, #ea580c, #f97316); color: #fff; padding: 14px 16px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .cust-header h2 { font-size: 17px; }
+    .cust-header small { opacity: 0.9; font-size: 12px; display: block; }
+    .table-select {
+      background: rgba(255,255,255,0.22); color: #fff; border: 1px solid rgba(255,255,255,0.4);
+      padding: 5px 8px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;
+    }
+    .table-select option { color: var(--dark); }
+
+    .cat-bar {
+      display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto; background: #fff; border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .cat-pill {
+      padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background: #fff;
+      font-size: 13px; font-weight: 600; color: var(--slate); cursor: pointer; white-space: nowrap;
+    }
+    .cat-pill.active { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
+
+    .menu-list { flex: 1; overflow-y: auto; padding: 12px; background: #f8fafc; display: flex; flex-direction: column; gap: 10px; }
+    .menu-card {
+      background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 10px;
+      display: flex; gap: 12px; align-items: center; transition: 0.15s;
+    }
+    .menu-card:hover { border-color: #fdba74; }
+    .menu-emoji {
+      width: 64px; height: 64px; border-radius: 12px; background: var(--primary-light);
+      display: flex; align-items: center; justify-content: center; font-size: 32px; flex-shrink: 0;
+    }
+    .menu-info { flex: 1; min-width: 0; }
+    .menu-name { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+    .menu-desc { font-size: 12px; color: var(--slate); margin-bottom: 5px; line-height: 1.3; }
+    .menu-price { font-weight: 700; color: var(--primary); font-size: 14px; }
+    .btn-add {
+      background: var(--primary); color: #fff; border: none; width: 34px; height: 34px;
+      border-radius: 10px; font-size: 20px; font-weight: 700; cursor: pointer; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn-add:hover { background: var(--primary-hover); }
+
+    /* Customer Cart Footer */
+    .cart-bar {
+      background: #fff; border-top: 1px solid var(--border); padding: 10px 14px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .cart-summary { font-size: 13px; }
+    .cart-summary strong { display: block; font-size: 16px; color: var(--primary); }
+    .btn-checkout {
+      background: var(--primary); color: #fff; border: none; padding: 10px 18px;
+      border-radius: 12px; font-weight: 700; font-size: 14px; cursor: pointer;
+    }
+    .btn-checkout:disabled { background: #cbd5e1; cursor: not-allowed; }
+
+    /* Cart Drawer inside Phone */
+    .cart-drawer {
+      position: absolute; inset: 0; background: rgba(15,23,42,0.55); z-index: 20;
+      display: flex; flex-direction: column; justify-content: flex-end;
+    }
+    .drawer-sheet {
+      background: #fff; border-radius: 20px 20px 0 0; max-height: 85%; display: flex; flex-direction: column;
+      padding: 16px; animation: slideUp 0.2s ease-out;
+    }
+    @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .drawer-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    .drawer-items { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+    .cart-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
+    .qty-ctrl { display: flex; align-items: center; gap: 8px; }
+    .qty-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: #f8fafc; font-weight: 700; cursor: pointer; }
+    .note-input {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
+      font-size: 13px; margin-bottom: 10px;
+    }
+
+    /* Owner POS Panel */
+    .pos-panel {
+      background: #fff; border-radius: 18px; border: 1px solid var(--border);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.05); overflow: hidden; display: flex; flex-direction: column;
+      min-height: 600px;
+    }
+    .pos-header {
+      padding: 14px 18px; background: #fff; border-bottom: 1px solid var(--border);
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;
+    }
+    .pos-stats { display: flex; gap: 12px; flex-wrap: wrap; }
+    .stat-box { background: #f8fafc; border: 1px solid var(--border); padding: 6px 12px; border-radius: 10px; font-size: 12px; }
+    .stat-box strong { display: block; font-size: 15px; color: var(--dark); }
+    .pos-actions { display: flex; gap: 8px; align-items: center; }
+    .btn-sm {
+      padding: 7px 11px; border-radius: 8px; border: 1px solid var(--border); background: #fff;
+      font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+    }
+    .btn-sm:hover { background: #f1f5f9; }
+    .btn-sm.sound-on { background: #dcfce7; color: var(--green); border-color: #86efac; }
+
+    .orders-board { padding: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; align-items: start; }
+    .empty-state { grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--slate); }
+
+    .order-card {
+      background: #fff; border: 1.5px solid var(--border); border-radius: 14px; padding: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04); animation: popIn 0.25s ease-out;
+    }
+    .order-card.new-order { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(234,88,12,0.15); }
+    @keyframes popIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    .order-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .badge-table { background: var(--dark); color: #fff; padding: 4px 10px; border-radius: 8px; font-weight: 700; font-size: 14px; }
+    .status-pill { padding: 4px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+    .st-new { background: #ffedd5; color: #c2410c; }
+    .st-cooking { background: #dbeafe; color: #1d4ed8; }
+    .st-done { background: #dcfce7; color: #15803d; }
+
+    .order-items { list-style: none; margin-bottom: 10px; font-size: 13px; display: flex; flex-direction: column; gap: 5px; }
+    .order-items li { display: flex; justify-content: space-between; }
+    .order-note { background: #fef9c3; color: #854d0e; padding: 6px 8px; border-radius: 8px; font-size: 12px; margin-bottom: 10px; }
+    .order-total { display: flex; justify-content: space-between; font-weight: 700; font-size: 15px; padding-top: 8px; border-top: 1px dashed var(--border); margin-bottom: 10px; }
+    .order-btns { display: flex; gap: 6px; }
+    .btn-act { flex: 1; padding: 8px; border: none; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; color: #fff; }
+    .btn-confirm { background: var(--blue); }
+    .btn-done { background: var(--green); }
+    .btn-bill { background: var(--slate); flex: 0 0 auto; padding: 8px 12px; }
+
+    /* QR Tab & Settings Tab */
+    .card-box { background: #fff; border-radius: 16px; border: 1px solid var(--border); padding: 20px; }
+    .qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; margin-top: 16px; }
+    .qr-card {
+      border: 2px dashed #cbd5e1; border-radius: 14px; padding: 16px; text-align: center; background: #fff;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+    }
+    .qr-box { padding: 8px; background: #fff; border: 1px solid var(--border); border-radius: 10px; min-height: 156px; display: flex; align-items: center; justify-content: center; }
+    .input-field { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; margin-top: 6px; }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 200;
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-box { background: #fff; border-radius: 16px; max-width: 360px; width: 100%; padding: 20px; text-align: center; }
+    .receipt { font-family: "Courier New", monospace; text-align: left; font-size: 13px; border: 1px dashed #94a3b8; padding: 14px; border-radius: 8px; margin: 12px 0; background: #fafafa; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 20px; right: 20px; background: var(--dark); color: #fff;
+      padding: 12px 18px; border-radius: 12px; font-size: 13px; font-weight: 600; z-index: 300;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: slideUp 0.2s ease-out;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="topbar" id="topbar">
+    <div class="brand">
+      🍜 Bếp Nhà Mình <span>QR ORDER DEMO</span>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-btn active" data-tab="split" onclick="switchTab('split')">📱 Song song (Khách | Quán)</button>
+      <button class="nav-btn" data-tab="customer" onclick="switchTab('customer')">🛒 Màn hình Khách</button>
+      <button class="nav-btn" data-tab="owner" onclick="switchTab('owner')">🖥️ Màn hình Quán <span id="badgeNewCount"></span></button>
+      <button class="nav-btn" data-tab="qr" onclick="switchTab('qr')">📷 Tạo mã QR Bàn</button>
+      <button class="nav-btn" data-tab="sync" onclick="switchTab('sync')">📡 Bắn đơn sang ĐT thật</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <!-- TAB 1 & 2 & 3 CONTAINER (Split / Customer / Owner) -->
+    <div id="mainGrid" class="split-grid">
+      
+      <!-- CUSTOMER VIEW -->
+      <section id="customerSection" class="phone-frame">
+        <div class="cust-header">
+          <div>
+            <h2>Bếp Nhà Mình</h2>
+            <small>Quét mã • Chọn món • Phục vụ tại bàn</small>
+          </div>
+          <select id="tableSelect" class="table-select" onchange="changeTable(this.value)">
+            <option value="01">Bàn 01</option>
+            <option value="02">Bàn 02</option>
+            <option value="03">Bàn 03</option>
+            <option value="04">Bàn 04</option>
+            <option value="05">Bàn 05</option>
+            <option value="06">Bàn 06</option>
+          </select>
+        </div>
+
+        <div class="cat-bar" id="catBar"></div>
+        <div class="menu-list" id="menuList"></div>
+
+        <div class="cart-bar">
+          <div class="cart-summary">
+            <span id="cartCountText">Chưa chọn món nào</span>
+            <strong id="cartTotalText">0đ</strong>
+          </div>
+          <button id="openCartBtn" class="btn-checkout" disabled onclick="toggleCartDrawer(true)">Xem giỏ & Đặt</button>
+        </div>
+
+        <!-- Cart Drawer -->
+        <div id="cartDrawer" class="cart-drawer hidden" onclick="if(event.target===this) toggleCartDrawer(false)">
+          <div class="drawer-sheet">
+            <div class="drawer-head">
+              <strong>Giỏ hàng — Bàn <span id="drawerTableNum">01</span></strong>
+              <button class="btn-sm" onclick="toggleCartDrawer(false)">✕ Đóng</button>
+            </div>
+            <div class="drawer-items" id="cartItemsList"></div>
+            <input type="text" id="orderNote" class="note-input" placeholder="Ghi chú cho bếp (VD: ít đá, không hành, cay ít...)" />
+            <div style="display:flex; justify-content:space-between; font-weight:700; margin-bottom:12px;">
+              <span>Tổng thanh toán:</span>
+              <span id="drawerTotal" style="color:var(--primary); font-size:17px;">0đ</span>
+            </div>
+            <button class="btn-checkout" style="width:100%; padding:13px;" onclick="submitOrder()">🚀 GỬI ĐƠN XUỐNG BẾP</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- OWNER POS VIEW -->
+      <section id="ownerSection" class="pos-panel">
+        <div class="pos-header">
+          <div class="pos-stats">
+            <div class="stat-box">Đơn hôm nay <strong id="statOrders">0</strong></div>
+            <div class="stat-box">Chờ xử lý <strong id="statPending" style="color:var(--primary);">0</strong></div>
+            <div class="stat-box">Doanh thu <strong id="statRevenue" style="color:var(--green);">0đ</strong></div>
+          </div>
+          <div class="pos-actions">
+            <button id="soundToggleBtn" class="btn-sm sound-on" onclick="toggleSound()">🔔 Âm báo: BẬT</button>
+            <button class="btn-sm" onclick="playTingTing(); showToast('Đã test chuông báo đơn!')">🔊 Test chuông</button>
+            <button class="btn-sm" onclick="clearOrders()" style="color:var(--red);">🗑️ Xóa đơn test</button>
+          </div>
+        </div>
+        <div class="orders-board" id="ordersBoard"></div>
+      </section>
+
+    </div>
+
+    <!-- TAB 4: QR GENERATOR -->
+    <section id="qrSection" class="single-wide hidden">
+      <div class="card-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h2>📷 Tạo mã QR dán tại từng bàn</h2>
+            <p style="color:var(--slate); font-size:13px; margin-top:4px;">
+              Mỗi bàn có 1 link riêng (VD: <code>?mode=customer&table=03</code>). Khi bạn đưa file này lên mạng (miễn phí trên Netlify/Vercel), khách quét mã là mở thẳng menu của đúng bàn đó.
+            </p>
+          </div>
+          <button class="btn-checkout" onclick="window.print()">🖨️ In tất cả mã QR</button>
+        </div>
+        <div class="qr-grid" id="qrGrid"></div>
+      </div>
+    </section>
+
+    <!-- TAB 5: REAL INTERNET SYNC (NTFY.SH) -->
+    <section id="syncSection" class="single-wrap hidden">
+      <div class="card-box">
+        <h2>📡 Bắn đơn thật qua Internet về Điện thoại</h2>
+        <p style="color:var(--slate); font-size:13px; margin:8px 0 16px; line-height:1.5;">
+          Nếu bạn muốn thử nghiệm <b>đặt món trên máy tính và đơn nổ thật về điện thoại của bạn qua Internet</b> (hoàn toàn miễn phí, không cần tạo tài khoản):
+        </p>
+        <ol style="font-size:13px; color:var(--dark); padding-left:18px; line-height:1.7; margin-bottom:16px;">
+          <li>Tải app <b>ntfy</b> (miễn phí trên App Store / CH Play) về điện thoại của bạn.</li>
+          <li>Đặt 1 cái tên kênh thật riêng tư bên dưới (VD: <code>bepnhaminh-8899</code>) rồi bấm <b>Lưu & Kết nối</b>.</li>
+          <li>Mở app <b>ntfy</b> trên điện thoại $\rightarrow$ bấm dấu <b>+</b> $\rightarrow$ nhập đúng tên kênh đó để theo dõi.</li>
+          <li>Quay lại đặt thử 1 đơn $\rightarrow$ Điện thoại bạn sẽ báo "Ting ting!" ngay lập tức!</li>
+        </ol>
+        <label style="font-size:13px; font-weight:700;">Mã kênh quán của bạn (Topic):</label>
+        <input type="text" id="ntfyTopicInput" class="input-field" placeholder="VD: quanpho-cuatoi-2026 (không dấu, không cách)" />
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          <button class="btn-checkout" style="flex:1;" onclick="saveSyncTopic()">💾 Lưu & Kích hoạt</button>
+          <button class="btn-sm" onclick="clearSyncTopic()">Ngắt kết nối</button>
+        </div>
+        <p id="syncStatusText" style="margin-top:12px; font-size:13px; color:var(--slate);"></p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Bill Modal -->
+  <div id="billModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeBillModal()">
+    <div class="modal-box">
+      <h3>🧾 Hóa đơn thanh toán</h3>
+      <div id="billContent" class="receipt"></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-checkout" style="flex:1;" onclick="window.print()">🖨️ In Bill</button>
+        <button class="btn-sm" onclick="closeBillModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ====== 1. DỮ LIỆU MENU MẪU ======
+    const MENU_ITEMS = [
+      { id: 1, name: "Phở Bò Tái Lăn", cat: "Đồ ăn", price: 55000, desc: "Nước dùng ninh xương 12h, thịt bò mềm thơm", emoji: "🍜" },
+      { id: 2, name: "Bún Chả Hà Nội", cat: "Đồ ăn", price: 50000, desc: "Chả nướng than hoa, nem rán giòn rụm", emoji: "🥢" },
+      { id: 3, name: "Cơm Tấm Sườn Bì Chả", cat: "Đồ ăn", price: 60000, desc: "Sườn nướng mật ong, mỡ hành, nước mắm kẹo", emoji: "🍛" },
+      { id: 4, name: "Bánh Mì Chảo Đặc Biệt", cat: "Đồ ăn", price: 45000, desc: "Pate béo ngậy, trứng ốp la, xúc xích", emoji: "🥖" },
+      { id: 5, name: "Trà Sữa Trân Châu Đường Đen", cat: "Đồ uống", price: 35000, desc: "Trân châu nấu ấm dẻo, sữa tươi thanh trùng", emoji: "🧋" },
+      { id: 6, name: "Cà Phê Sữa Đá Sài Gòn", cat: "Đồ uống", price: 29000, desc: "Cà phê rang mộc đậm đà, thơm lừng", emoji: "☕" },
+      { id: 7, name: "Trà Đào Cam Sả", cat: "Đồ uống", price: 35000, desc: "Miếng đào giòn ngọt, hương sả thanh mát", emoji: "🍹" },
+      { id: 8, name: "Khoai Tây Chiên Lắc Phô Mai", cat: "Ăn vặt", price: 30000, desc: "Giòn rụm, phủ bột phô mai đậm vị", emoji: "🍟" },
+      { id: 9, name: "Gà Rán Giòn Cay (2 miếng)", cat: "Ăn vặt", price: 48000, desc: "Kèm tương ớt & tương cà", emoji: "🍗" }
+    ];
+
+    const CATEGORIES = ["Tất cả", "Đồ ăn", "Đồ uống", "Ăn vặt"];
+    const STORAGE_KEY = "qr_demo_orders_v1";
+    const TOPIC_KEY = "qr_demo_ntfy_topic";
+
+    let currentTab = "split";
+    let currentCat = "Tất cả";
+    let currentTable = "01";
+    let cart = [];
+    let orders = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    let soundEnabled = true;
+    let ntfyTopic = localStorage.getItem(TOPIC_KEY) || "";
+    let sseSource = null;
+
+    // ====== 2. TIỆN ÍCH & ÂM THANH ======
+    const fmt = (n) => Number(n).toLocaleString("vi-VN") + "đ";
+    const esc = (str) => String(str).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+    function showToast(msg) {
+      const t = document.createElement("div");
+      t.className = "toast";
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    function playTingTing() {
+      if (!soundEnabled) return;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        [880, 1174.66].forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + i * 0.14);
+          gain.gain.setValueAtTime(0.25, ctx.currentTime + i * 0.14);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.14 + 0.45);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + i * 0.14);
+          osc.stop(ctx.currentTime + i * 0.14 + 0.45);
+        });
+      } catch (e) {}
+    }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      const btn = document.getElementById("soundToggleBtn");
+      btn.textContent = soundEnabled ? "🔔 Âm báo: BẬT" : "🔕 Âm báo: TẮT";
+      btn.className = "btn-sm" + (soundEnabled ? " sound-on" : "");
+      if (soundEnabled) playTingTing();
+    }
+
+    // ====== 3. CHUYỂN TAB & GIAO DIỆN ======
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+
+      const mainGrid = document.getElementById("mainGrid");
+      const cust = document.getElementById("customerSection");
+      const owner = document.getElementById("ownerSection");
+      const qr = document.getElementById("qrSection");
+      const sync = document.getElementById("syncSection");
+
+      mainGrid.classList.toggle("hidden", tab === "qr" || tab === "sync");
+      qr.classList.toggle("hidden", tab !== "qr");
+      sync.classList.toggle("hidden", tab !== "sync");
+
+      if (tab === "split") {
+        mainGrid.className = "split-grid";
+        cust.classList.remove("hidden");
+        owner.classList.remove("hidden");
+      } else if (tab === "customer") {
+        mainGrid.className = "single-wrap";
+        cust.classList.remove("hidden");
+        owner.classList.add("hidden");
+      } else if (tab === "owner") {
+        mainGrid.className = "single-wide";
+        cust.classList.add("hidden");
+        owner.classList.remove("hidden");
+      } else if (tab === "qr") {
+        renderQRCodes();
+      }
+    }
+
+    // ====== 4. MÀN HÌNH KHÁCH HÀNG ======
+    function renderMenu() {
+      document.getElementById("catBar").innerHTML = CATEGORIES.map(c =>
+        `<button class="cat-pill ${c === currentCat ? 'active' : ''}" onclick="currentCat='${c}'; renderMenu()">${c}</button>`
+      ).join("");
+
+      const filtered = currentCat === "Tất cả" ? MENU_ITEMS : MENU_ITEMS.filter(m => m.cat === currentCat);
+      document.getElementById("menuList").innerHTML = filtered.map(item => `
+        <div class="menu-card">
+          <div class="menu-emoji">${item.emoji}</div>
+          <div class="menu-info">
+            <div class="menu-name">${esc(item.name)}</div>
+            <div class="menu-desc">${esc(item.desc)}</div>
+            <div class="menu-price">${fmt(item.price)}</div>
+          </div>
+          <button class="btn-add" onclick="addToCart(${item.id})" title="Thêm vào giỏ">+</button>
+        </div>
+      `).join("");
+    }
+
+    function changeTable(val) {
+      currentTable = val;
+      document.getElementById("drawerTableNum").textContent = val;
+    }
+
+    function addToCart(id) {
+      const item = MENU_ITEMS.find(m => m.id === id);
+      const existing = cart.find(c => c.id === id);
+      if (existing) existing.qty++;
+      else cart.push({ ...item, qty: 1 });
+      updateCartUI();
+      showToast(`Đã thêm ${item.name}`);
+    }
+
+    function updateQty(id, delta) {
+      const idx = cart.findIndex(c => c.id === id);
+      if (idx === -1) return;
+      cart[idx].qty += delta;
+      if (cart[idx].qty <= 0) cart.splice(idx, 1);
+      updateCartUI();
+      renderCartDrawer();
+    }
+
+    function updateCartUI() {
+      const totalQty = cart.reduce((s, i) => s + i.qty, 0);
+      const totalAmt = cart.reduce((s, i) => s + i.qty * i.price, 0);
+      document.getElementById("cartCountText").textContent = totalQty ? `${totalQty} món đã chọn (Bàn ${currentTable})` : "Chưa chọn món nào";
+      document.getElementById("cartTotalText").textContent = fmt(totalAmt);
+      document.getElementById("openCartBtn").disabled = totalQty === 0;
+    }
+
+    function toggleCartDrawer(show) {
+      document.getElementById("cartDrawer").classList.toggle("hidden", !show);
+      if (show) renderCartDrawer();
+    }
+
+    function renderCartDrawer() {
+      const list = document.getElementById("cartItemsList");
+      if (!cart.length) {
+        toggleCartDrawer(false);
+        return;
+      }
+      list.innerHTML = cart.map(item => `
+        <div class="cart-item">
+          <div>
+            <div style="font-weight:700; font-size:14px;">${esc(item.name)}</div>
+            <div style="font-size:12px; color:var(--primary);">${fmt(item.price)}</div>
+          </div>
+          <div class="qty-ctrl">
+            <button class="qty-btn" onclick="updateQty(${item.id}, -1)">-</button>
+            <strong style="min-width:18px; text-align:center;">${item.qty}</strong>
+            <button class="qty-btn" onclick="updateQty(${item.id}, 1)">+</button>
+          </div>
+        </div>
+      `).join("");
+      const totalAmt = cart.reduce((s, i) => s + i.qty * i.price, 0);
+      document.getElementById("drawerTotal").textContent = fmt(totalAmt);
+    }
+
+    // ====== 5. GỬI ĐƠN & ĐỒNG BỘ ======
+    async function submitOrder() {
+      if (!cart.length) return;
+      const now = new Date();
+      const order = {
+        id: String(Math.floor(1000 + Math.random() * 9000)),
+        table: currentTable,
+        items: cart.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
+        note: document.getElementById("orderNote").value.trim(),
+        total: cart.reduce((s, i) => s + i.qty * i.price, 0),
+        status: "new",
+        time: now.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+      };
+
+      receiveOrder(order, true);
+
+      // Bắn qua ntfy.sh nếu người dùng đã cấu hình
+      if (ntfyTopic) {
+        const lines = [
+          `🍜 ĐƠN MỚI - BÀN ${order.table} (#${order.id})`,
+          ...order.items.map(i => `• ${i.qty}x ${i.name} - ${fmt(i.qty * i.price)}`),
+          order.note ? `📝 Ghi chú: ${order.note}` : "",
+          `💰 Tổng: ${fmt(order.total)}`,
+          `[DATA:${JSON.stringify(order)}]`
+        ].filter(Boolean).join("\n");
+
+        fetch(`https://ntfy.sh/${encodeURIComponent(ntfyTopic)}`, {
+          method: "POST",
+          body: lines
+        }).catch(() => {});
+      }
+
+      cart = [];
+      document.getElementById("orderNote").value = "";
+      updateCartUI();
+      toggleCartDrawer(false);
+      showToast(`✅ Đã gửi đơn #${order.id} xuống bếp!`);
+    }
+
+    function receiveOrder(order, saveToLocal = true) {
+      if (orders.some(o => o.id === order.id)) return;
+      orders.unshift(order);
+      if (saveToLocal) localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+      renderOrders();
+      playTingTing();
+    }
+
+    // ====== 6. MÀN HÌNH CHỦ QUÁN ======
+    function renderOrders() {
+      const board = document.getElementById("ordersBoard");
+      const newCount = orders.filter(o => o.status === "new").length;
+      const pendingCount = orders.filter(o => o.status !== "done").length;
+      const revenue = orders.reduce((s, o) => s + o.total, 0);
+
+      document.getElementById("statOrders").textContent = orders.length;
+      document.getElementById("statPending").textContent = pendingCount;
+      document.getElementById("statRevenue").textContent = fmt(revenue);
+      document.getElementById("badgeNewCount").textContent = newCount ? `(${newCount})` : "";
+
+      if (!orders.length) {
+        board.innerHTML = `<div class="empty-state"><h3>Chưa có đơn hàng nào</h3><p style="margin-top:6px;">Hãy chọn món ở màn hình Khách rồi bấm <b>Gửi đơn xuống bếp</b> để xem đơn nổ về đây!</p></div>`;
+        return;
+      }
+
+      board.innerHTML = orders.map(o => {
+        const stMap = {
+          new: { text: "Chờ xác nhận", cls: "st-new" },
+          cooking: { text: "Đang làm", cls: "st-cooking" },
+          done: { text: "Đã xong", cls: "st-done" }
+        };
+        const st = stMap[o.status] || stMap.new;
+        return `
+          <div class="order-card ${o.status === 'new' ? 'new-order' : ''}">
+            <div class="order-top">
+              <div>
+                <span class="badge-table">Bàn ${esc(o.table)}</span>
+                <span style="font-size:12px; color:var(--slate); margin-left:6px;">#${esc(o.id)} • ${esc(o.time)}</span>
+              </div>
+              <span class="status-pill ${st.cls}">${st.text}</span>
+            </div>
+            <ul class="order-items">
+              ${o.items.map(i => `<li><span><b>${i.qty}x</b> ${esc(i.name)}</span><span>${fmt(i.qty * i.price)}</span></li>`).join("")}
+            </ul>
+            ${o.note ? `<div class="order-note">📝 ${esc(o.note)}</div>` : ""}
+            <div class="order-total"><span>Tổng cộng:</span><span style="color:var(--primary);">${fmt(o.total)}</span></div>
+            <div class="order-btns">
+              ${o.status === "new" ? `<button class="btn-act btn-confirm" onclick="setOrderStatus('${o.id}','cooking')">👨‍🍳 Nhận & Làm</button>` : ""}
+              ${o.status === "cooking" ? `<button class="btn-act btn-done" onclick="setOrderStatus('${o.id}','done')">✅ Ra món xong</button>` : ""}
+              <button class="btn-act btn-bill" onclick="openBill('${o.id}')">🧾 Bill</button>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function setOrderStatus(id, status) {
+      const o = orders.find(x => x.id === id);
+      if (!o) return;
+      o.status = status;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
+      renderOrders();
+    }
+
+    function clearOrders() {
+      if (!orders.length) return;
+      orders = [];
+      localStorage.setItem(STORAGE_KEY, "[]");
+      renderOrders();
+      showToast("Đã xóa sạch đơn test");
+    }
+
+    function openBill(id) {
+      const o = orders.find(x => x.id === id);
+      if (!o) return;
+      document.getElementById("billContent").innerHTML = `
+        <div style="text-align:center; font-weight:bold; margin-bottom:8px;">
+          BẾP NHÀ MÌNH<br/>PHIẾU THANH TOÁN - BÀN ${esc(o.table)}
+        </div>
+        <div>Mã đơn: #${esc(o.id)} | Giờ: ${esc(o.time)}</div>
+        <hr style="margin:8px 0; border:none; border-top:1px dashed #94a3b8;"/>
+        ${o.items.map(i => `<div style="display:flex; justify-content:space-between; margin:4px 0;"><span>${i.qty}x ${esc(i.name)}</span><span>${fmt(i.qty*i.price)}</span></div>`).join("")}
+        <hr style="margin:8px 0; border:none; border-top:1px dashed #94a3b8;"/>
+        <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:15px;">
+          <span>TỔNG TIỀN:</span><span>${fmt(o.total)}</span>
+        </div>
+        <div style="text-align:center; margin-top:10px; font-size:11px;">Cảm ơn quý khách & hẹn gặp lại!</div>
+      `;
+      document.getElementById("billModal").classList.remove("hidden");
+    }
+
+    function closeBillModal() {
+      document.getElementById("billModal").classList.add("hidden");
+    }
+
+    // ====== 7. TẠO MÃ QR CHO TỪNG BÀN ======
+    function renderQRCodes() {
+      const grid = document.getElementById("qrGrid");
+      grid.innerHTML = "";
+      const baseUrl = window.location.href.split("?")[0];
+      ["01", "02", "03", "04", "05", "06"].forEach(num => {
+        const link = `${baseUrl}?mode=customer&table=${num}` + (ntfyTopic ? `&topic=${encodeURIComponent(ntfyTopic)}` : "");
+        const card = document.createElement("div");
+        card.className = "qr-card";
+        card.innerHTML = `
+          <div style="font-weight:800; font-size:16px; color:var(--primary);">BÀN SỐ ${num}</div>
+          <div class="qr-box" id="qrBox${num}"></div>
+          <div style="font-size:12px; font-weight:600;">Quét mã để gọi món</div>
+          <button class="btn-sm" onclick="changeTable('${num}'); document.getElementById('tableSelect').value='${num}'; switchTab('customer');">Thử quét Bàn ${num}</button>
+        `;
+        grid.appendChild(card);
+
+        const target = document.getElementById(`qrBox${num}`);
+        if (typeof QRCode !== "undefined") {
+          new QRCode(target, { text: link, width: 140, height: 140 });
+        } else {
+          target.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(link)}" alt="QR Bàn ${num}" />`;
+        }
+      });
+    }
+
+    // ====== 8. ĐỒNG BỘ INTERNET QUA NTFY.SH ======
+    function saveSyncTopic() {
+      const val = document.getElementById("ntfyTopicInput").value.trim().replace(/[^a-zA-Z0-9_-]/g, "");
+      if (!val) return showToast("Vui lòng nhập tên kênh hợp lệ (chữ không dấu hoặc số)");
+      ntfyTopic = val;
+      localStorage.setItem(TOPIC_KEY, val);
+      connectNtfySSE();
+      showToast("Đã kích hoạt đồng bộ kênh: " + val);
+    }
+
+    function clearSyncTopic() {
+      ntfyTopic = "";
+      localStorage.removeItem(TOPIC_KEY);
+      document.getElementById("ntfyTopicInput").value = "";
+      if (sseSource) sseSource.close();
+      updateSyncStatus();
+      showToast("Đã ngắt đồng bộ Internet");
+    }
+
+    function updateSyncStatus() {
+      const el = document.getElementById("syncStatusText");
+      el.innerHTML = ntfyTopic
+        ? `🟢 Đang kết nối kênh: <b>${esc(ntfyTopic)}</b> (Mọi đơn mới sẽ tự động bắn sang kênh này)`
+        : `⚪ Chưa kết nối (Đang chạy chế độ Demo nội bộ trên máy)`;
+    }
+
+    function connectNtfySSE() {
+      if (sseSource) sseSource.close();
+      updateSyncStatus();
+      if (!ntfyTopic) return;
+      sseSource = new EventSource(`https://ntfy.sh/${encodeURIComponent(ntfyTopic)}/sse`);
+      sseSource.onmessage = (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload.event === "message" && payload.message) {
+            const match = payload.message.match(/\[DATA:(\{.*\})\]/);
+            if (match) {
+              const orderObj = JSON.parse(match[1]);
+              receiveOrder(orderObj, true);
+            }
+          }
+        } catch (err) {}
+      };
+    }
+
+    // ====== 9. KHỞI TẠO & ĐỌC THAM SỐ QR ======
+    window.addEventListener("storage", (e) => {
+      if (e.key === STORAGE_KEY) {
+        orders = JSON.parse(e.newValue || "[]");
+        renderOrders();
+      }
+    });
+
+    (function init() {
+      renderMenu();
+      renderOrders();
+
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("topic")) {
+        ntfyTopic = params.get("topic");
+        localStorage.setItem(TOPIC_KEY, ntfyTopic);
+      }
+      if (params.get("table")) {
+        currentTable = params.get("table").padStart(2, "0");
+        document.getElementById("tableSelect").value = currentTable;
+        document.getElementById("drawerTableNum").textContent = currentTable;
+      }
+      if (params.get("mode") === "customer") {
+        switchTab("customer");
+      }
+
+      document.getElementById("ntfyTopicInput").value = ntfyTopic;
+      connectNtfySSE();
+    })();
+  </script>
+</body>
+</html>
