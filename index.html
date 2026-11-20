@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Demo QR Order - Quét mã gọi món tại bàn</title>
+  <title>Bếp Nhà Mình - Quét mã gọi món tại bàn</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
     :root {
@@ -17,14 +17,13 @@
       --border: #e2e8f0;
       --green: #16a34a;
       --blue: #2563eb;
-      --yellow: #d97706;
       --red: #dc2626;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: var(--bg); color: var(--dark); min-height: 100vh; display: flex; flex-direction: column; }
 
-    /* Top Navigation */
+    /* Top Navigation (Admin only) */
     .topbar {
       background: var(--dark); color: #fff; padding: 10px 16px;
       display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
@@ -55,32 +54,44 @@
     .phone-frame {
       background: #fff; border-radius: 24px; border: 6px solid #1e293b;
       overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.12);
-      display: flex; flex-direction: column; height: calc(100vh - 100px); min-height: 600px; max-height: 820px;
+      display: flex; flex-direction: column; height: calc(100vh - 100px); min-height: 580px; max-height: 820px;
       position: relative;
     }
+
+    /* Fullscreen Customer Mode when scanning QR */
+    body.customer-only { background: #fff; }
+    body.customer-only .topbar { display: none !important; }
+    body.customer-only .workspace { padding: 0; max-width: 100%; }
+    body.customer-only #mainGrid { max-width: 540px; margin: 0 auto; width: 100%; }
+    body.customer-only .phone-frame {
+      border: none; border-radius: 0; box-shadow: none;
+      height: 100vh; height: 100dvh; max-height: none; min-height: 100vh;
+    }
+
     .cust-header {
       background: linear-gradient(135deg, #ea580c, #f97316); color: #fff; padding: 14px 16px;
-      display: flex; justify-content: space-between; align-items: center;
+      display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
     }
-    .cust-header h2 { font-size: 17px; }
-    .cust-header small { opacity: 0.9; font-size: 12px; display: block; }
-    .table-select {
-      background: rgba(255,255,255,0.22); color: #fff; border: 1px solid rgba(255,255,255,0.4);
-      padding: 5px 8px; border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;
+    .cust-header h2 { font-size: 18px; }
+    .cust-header small { opacity: 0.92; font-size: 12px; display: block; margin-top: 2px; }
+    .table-select, .table-badge-fixed {
+      background: rgba(255,255,255,0.22); color: #fff; border: 1px solid rgba(255,255,255,0.45);
+      padding: 6px 12px; border-radius: 10px; font-weight: 800; font-size: 14px;
     }
+    .table-select { cursor: pointer; }
     .table-select option { color: var(--dark); }
 
     .cat-bar {
       display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto; background: #fff; border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
+      flex-shrink: 0; -webkit-overflow-scrolling: touch;
     }
     .cat-pill {
-      padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border); background: #fff;
+      padding: 7px 14px; border-radius: 20px; border: 1px solid var(--border); background: #fff;
       font-size: 13px; font-weight: 600; color: var(--slate); cursor: pointer; white-space: nowrap;
     }
     .cat-pill.active { background: var(--primary-light); color: var(--primary); border-color: var(--primary); }
 
-    .menu-list { flex: 1; overflow-y: auto; padding: 12px; background: #f8fafc; display: flex; flex-direction: column; gap: 10px; }
+    .menu-list { flex: 1; overflow-y: auto; padding: 12px; background: #f8fafc; display: flex; flex-direction: column; gap: 10px; -webkit-overflow-scrolling: touch; }
     .menu-card {
       background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 10px;
       display: flex; gap: 12px; align-items: center; transition: 0.15s;
@@ -91,25 +102,25 @@
       display: flex; align-items: center; justify-content: center; font-size: 32px; flex-shrink: 0;
     }
     .menu-info { flex: 1; min-width: 0; }
-    .menu-name { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+    .menu-name { font-weight: 700; font-size: 15px; margin-bottom: 3px; }
     .menu-desc { font-size: 12px; color: var(--slate); margin-bottom: 5px; line-height: 1.3; }
     .menu-price { font-weight: 700; color: var(--primary); font-size: 14px; }
     .btn-add {
-      background: var(--primary); color: #fff; border: none; width: 34px; height: 34px;
-      border-radius: 10px; font-size: 20px; font-weight: 700; cursor: pointer; flex-shrink: 0;
+      background: var(--primary); color: #fff; border: none; width: 36px; height: 36px;
+      border-radius: 10px; font-size: 22px; font-weight: 700; cursor: pointer; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
     }
     .btn-add:hover { background: var(--primary-hover); }
 
     /* Customer Cart Footer */
     .cart-bar {
-      background: #fff; border-top: 1px solid var(--border); padding: 10px 14px;
-      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      background: #fff; border-top: 1px solid var(--border); padding: 12px 14px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-shrink: 0;
     }
     .cart-summary { font-size: 13px; }
     .cart-summary strong { display: block; font-size: 16px; color: var(--primary); }
     .btn-checkout {
-      background: var(--primary); color: #fff; border: none; padding: 10px 18px;
+      background: var(--primary); color: #fff; border: none; padding: 11px 18px;
       border-radius: 12px; font-weight: 700; font-size: 14px; cursor: pointer;
     }
     .btn-checkout:disabled { background: #cbd5e1; cursor: not-allowed; }
@@ -128,10 +139,10 @@
     .drawer-items { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
     .cart-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding-bottom: 8px; border-bottom: 1px dashed var(--border); }
     .qty-ctrl { display: flex; align-items: center; gap: 8px; }
-    .qty-btn { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: #f8fafc; font-weight: 700; cursor: pointer; }
+    .qty-btn { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border); background: #f8fafc; font-weight: 700; cursor: pointer; }
     .note-input {
-      width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px;
-      font-size: 13px; margin-bottom: 10px;
+      width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+      font-size: 16px; margin-bottom: 10px;
     }
 
     /* Owner POS Panel */
@@ -197,23 +208,23 @@
       position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 200;
       display: flex; align-items: center; justify-content: center; padding: 16px;
     }
-    .modal-box { background: #fff; border-radius: 16px; max-width: 360px; width: 100%; padding: 20px; text-align: center; }
+    .modal-box { background: #fff; border-radius: 18px; max-width: 360px; width: 100%; padding: 22px; text-align: center; }
     .receipt { font-family: "Courier New", monospace; text-align: left; font-size: 13px; border: 1px dashed #94a3b8; padding: 14px; border-radius: 8px; margin: 12px 0; background: #fafafa; }
 
     /* Toast */
     .toast {
-      position: fixed; bottom: 20px; right: 20px; background: var(--dark); color: #fff;
-      padding: 12px 18px; border-radius: 12px; font-size: 13px; font-weight: 600; z-index: 300;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.2); animation: slideUp 0.2s ease-out;
+      position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%); background: var(--dark); color: #fff;
+      padding: 10px 18px; border-radius: 24px; font-size: 13px; font-weight: 600; z-index: 300;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2); white-space: nowrap;
     }
   </style>
 </head>
 <body>
 
-  <!-- Top Bar -->
+  <!-- Top Bar (Tự động ẩn khi khách quét mã QR) -->
   <header class="topbar" id="topbar">
     <div class="brand">
-      🍜 Bếp Nhà Mình <span>QR ORDER DEMO</span>
+      🍜 Bếp Nhà Mình <span>QUẢN LÝ QUÁN</span>
     </div>
     <div class="nav-tabs">
       <button class="nav-btn active" data-tab="split" onclick="switchTab('split')">📱 Song song (Khách | Quán)</button>
@@ -225,15 +236,15 @@
   </header>
 
   <main class="workspace">
-    <!-- TAB 1 & 2 & 3 CONTAINER (Split / Customer / Owner) -->
+    <!-- TAB 1 & 2 & 3 CONTAINER -->
     <div id="mainGrid" class="split-grid">
       
       <!-- CUSTOMER VIEW -->
       <section id="customerSection" class="phone-frame">
         <div class="cust-header">
           <div>
-            <h2>Bếp Nhà Mình</h2>
-            <small>Quét mã • Chọn món • Phục vụ tại bàn</small>
+            <h2>🍜 Bếp Nhà Mình</h2>
+            <small>Chọn món bên dưới • Phục vụ tại bàn</small>
           </div>
           <select id="tableSelect" class="table-select" onchange="changeTable(this.value)">
             <option value="01">Bàn 01</option>
@@ -243,6 +254,7 @@
             <option value="05">Bàn 05</option>
             <option value="06">Bàn 06</option>
           </select>
+          <span id="tableBadgeFixed" class="table-badge-fixed hidden">Bàn 01</span>
         </div>
 
         <div class="cat-bar" id="catBar"></div>
@@ -300,7 +312,8 @@
           <div>
             <h2>📷 Tạo mã QR dán tại từng bàn</h2>
             <p style="color:var(--slate); font-size:13px; margin-top:4px;">
-              Mỗi bàn có 1 link riêng (VD: <code>?mode=customer&table=03</code>). Khi bạn đưa file này lên mạng (miễn phí trên Netlify/Vercel), khách quét mã là mở thẳng menu của đúng bàn đó.
+              Khách quét mã sẽ mở thẳng <b>chỉ riêng Menu của đúng bàn đó</b> (ẩn hết thanh công cụ của chủ quán).<br/>
+              <i>Nhớ cài đặt kênh ở tab <b>📡 Bắn đơn sang ĐT thật</b> trước khi in mã QR nhé!</i>
             </p>
           </div>
           <button class="btn-checkout" onclick="window.print()">🖨️ In tất cả mã QR</button>
@@ -314,13 +327,12 @@
       <div class="card-box">
         <h2>📡 Bắn đơn thật qua Internet về Điện thoại</h2>
         <p style="color:var(--slate); font-size:13px; margin:8px 0 16px; line-height:1.5;">
-          Nếu bạn muốn thử nghiệm <b>đặt món trên máy tính và đơn nổ thật về điện thoại của bạn qua Internet</b> (hoàn toàn miễn phí, không cần tạo tài khoản):
+          Để điện thoại của khách bắn được đơn hàng qua mạng về máy tính/điện thoại chủ quán của bạn:
         </p>
         <ol style="font-size:13px; color:var(--dark); padding-left:18px; line-height:1.7; margin-bottom:16px;">
-          <li>Tải app <b>ntfy</b> (miễn phí trên App Store / CH Play) về điện thoại của bạn.</li>
-          <li>Đặt 1 cái tên kênh thật riêng tư bên dưới (VD: <code>bepnhaminh-8899</code>) rồi bấm <b>Lưu & Kết nối</b>.</li>
-          <li>Mở app <b>ntfy</b> trên điện thoại $\rightarrow$ bấm dấu <b>+</b> $\rightarrow$ nhập đúng tên kênh đó để theo dõi.</li>
-          <li>Quay lại đặt thử 1 đơn $\rightarrow$ Điện thoại bạn sẽ báo "Ting ting!" ngay lập tức!</li>
+          <li>Đặt 1 tên kênh riêng tư cho quán bên dưới (VD: <code>bepnhaminh-8899</code>) rồi bấm <b>Lưu & Kích hoạt</b>.</li>
+          <li><i>(Tùy chọn)</i> Tải app <b>ntfy</b> (miễn phí trên App Store / CH Play) về điện thoại chủ quán $\rightarrow$ bấm dấu <b>+</b> $\rightarrow$ nhập đúng tên kênh đó để điện thoại cũng nổ thông báo.</li>
+          <li>Sau khi lưu tên kênh, quay sang tab <b>📷 Tạo mã QR Bàn</b> để lấy mã QR cho khách quét!</li>
         </ol>
         <label style="font-size:13px; font-weight:700;">Mã kênh quán của bạn (Topic):</label>
         <input type="text" id="ntfyTopicInput" class="input-field" placeholder="VD: quanpho-cuatoi-2026 (không dấu, không cách)" />
@@ -333,7 +345,17 @@
     </section>
   </main>
 
-  <!-- Bill Modal -->
+  <!-- Customer Order Success Modal -->
+  <div id="successModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeSuccessModal()">
+    <div class="modal-box">
+      <div style="font-size:48px; margin-bottom:8px;">✅</div>
+      <h3 style="color:var(--green); margin-bottom:6px;">Đã gửi đơn xuống bếp!</h3>
+      <p id="successMsg" style="font-size:14px; color:var(--slate); line-height:1.5; margin-bottom:16px;"></p>
+      <button class="btn-checkout" style="width:100%;" onclick="closeSuccessModal()">Gọi thêm món khác</button>
+    </div>
+  </div>
+
+  <!-- Bill Modal (Admin) -->
   <div id="billModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeBillModal()">
     <div class="modal-box">
       <h3>🧾 Hóa đơn thanh toán</h3>
@@ -371,21 +393,23 @@
     let soundEnabled = true;
     let ntfyTopic = localStorage.getItem(TOPIC_KEY) || "";
     let sseSource = null;
+    let isCustomerQRMode = false;
 
     // ====== 2. TIỆN ÍCH & ÂM THANH ======
     const fmt = (n) => Number(n).toLocaleString("vi-VN") + "đ";
     const esc = (str) => String(str).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
     function showToast(msg) {
+      document.querySelectorAll(".toast").forEach(el => el.remove());
       const t = document.createElement("div");
       t.className = "toast";
       t.textContent = msg;
       document.body.appendChild(t);
-      setTimeout(() => t.remove(), 3000);
+      setTimeout(() => t.remove(), 2200);
     }
 
     function playTingTing() {
-      if (!soundEnabled) return;
+      if (!soundEnabled || isCustomerQRMode) return;
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         [880, 1174.66].forEach((freq, i) => {
@@ -466,6 +490,8 @@
     function changeTable(val) {
       currentTable = val;
       document.getElementById("drawerTableNum").textContent = val;
+      document.getElementById("tableBadgeFixed").textContent = "Bàn " + val;
+      updateCartUI();
     }
 
     function addToCart(id) {
@@ -536,9 +562,10 @@
         time: now.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
       };
 
-      receiveOrder(order, true);
+      if (!isCustomerQRMode) {
+        receiveOrder(order, true);
+      }
 
-      // Bắn qua ntfy.sh nếu người dùng đã cấu hình
       if (ntfyTopic) {
         const lines = [
           `🍜 ĐƠN MỚI - BÀN ${order.table} (#${order.id})`,
@@ -548,17 +575,27 @@
           `[DATA:${JSON.stringify(order)}]`
         ].filter(Boolean).join("\n");
 
-        fetch(`https://ntfy.sh/${encodeURIComponent(ntfyTopic)}`, {
-          method: "POST",
-          body: lines
-        }).catch(() => {});
+        try {
+          await fetch(`https://ntfy.sh/${encodeURIComponent(ntfyTopic)}`, {
+            method: "POST",
+            body: lines
+          });
+        } catch (e) {}
       }
 
       cart = [];
       document.getElementById("orderNote").value = "";
       updateCartUI();
       toggleCartDrawer(false);
-      showToast(`✅ Đã gửi đơn #${order.id} xuống bếp!`);
+
+      document.getElementById("successMsg").innerHTML = `
+        Mã đơn <b>#${esc(order.id)}</b> tại <b>Bàn ${esc(order.table)}</b> (Tổng <b>${fmt(order.total)}</b>) đã được chuyển tới quầy bếp.<br/>Quý khách vui lòng đợi trong giây lát!
+      `;
+      document.getElementById("successModal").classList.remove("hidden");
+    }
+
+    function closeSuccessModal() {
+      document.getElementById("successModal").classList.add("hidden");
     }
 
     function receiveOrder(order, saveToLocal = true) {
@@ -582,7 +619,7 @@
       document.getElementById("badgeNewCount").textContent = newCount ? `(${newCount})` : "";
 
       if (!orders.length) {
-        board.innerHTML = `<div class="empty-state"><h3>Chưa có đơn hàng nào</h3><p style="margin-top:6px;">Hãy chọn món ở màn hình Khách rồi bấm <b>Gửi đơn xuống bếp</b> để xem đơn nổ về đây!</p></div>`;
+        board.innerHTML = `<div class="empty-state"><h3>Chưa có đơn hàng nào</h3><p style="margin-top:6px;">Khi khách quét mã QR hoặc đặt món ở bên trái, đơn sẽ tự động nổ về đây!</p></div>`;
         return;
       }
 
@@ -669,7 +706,7 @@
           <div style="font-weight:800; font-size:16px; color:var(--primary);">BÀN SỐ ${num}</div>
           <div class="qr-box" id="qrBox${num}"></div>
           <div style="font-size:12px; font-weight:600;">Quét mã để gọi món</div>
-          <button class="btn-sm" onclick="changeTable('${num}'); document.getElementById('tableSelect').value='${num}'; switchTab('customer');">Thử quét Bàn ${num}</button>
+          <a href="${link}" target="_blank" class="btn-sm" style="text-decoration:none; color:var(--dark);">Mở thử link Bàn ${num}</a>
         `;
         grid.appendChild(card);
 
@@ -711,7 +748,7 @@
     function connectNtfySSE() {
       if (sseSource) sseSource.close();
       updateSyncStatus();
-      if (!ntfyTopic) return;
+      if (!ntfyTopic || isCustomerQRMode) return;
       sseSource = new EventSource(`https://ntfy.sh/${encodeURIComponent(ntfyTopic)}/sse`);
       sseSource.onmessage = (e) => {
         try {
@@ -729,32 +766,37 @@
 
     // ====== 9. KHỞI TẠO & ĐỌC THAM SỐ QR ======
     window.addEventListener("storage", (e) => {
-      if (e.key === STORAGE_KEY) {
+      if (e.key === STORAGE_KEY && !isCustomerQRMode) {
         orders = JSON.parse(e.newValue || "[]");
         renderOrders();
       }
     });
 
     (function init() {
-      renderMenu();
-      renderOrders();
-
       const params = new URLSearchParams(window.location.search);
       if (params.get("topic")) {
         ntfyTopic = params.get("topic");
-        localStorage.setItem(TOPIC_KEY, ntfyTopic);
       }
       if (params.get("table")) {
         currentTable = params.get("table").padStart(2, "0");
         document.getElementById("tableSelect").value = currentTable;
         document.getElementById("drawerTableNum").textContent = currentTable;
-      }
-      if (params.get("mode") === "customer") {
-        switchTab("customer");
+        document.getElementById("tableBadgeFixed").textContent = "Bàn " + currentTable;
       }
 
-      document.getElementById("ntfyTopicInput").value = ntfyTopic;
-      connectNtfySSE();
+      if (params.get("mode") === "customer") {
+        isCustomerQRMode = true;
+        document.body.classList.add("customer-only");
+        document.getElementById("tableSelect").classList.add("hidden");
+        document.getElementById("tableBadgeFixed").classList.remove("hidden");
+        switchTab("customer");
+      } else {
+        renderOrders();
+        document.getElementById("ntfyTopicInput").value = ntfyTopic;
+        connectNtfySSE();
+      }
+
+      renderMenu();
     })();
   </script>
 </body>
