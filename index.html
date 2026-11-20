@@ -390,7 +390,8 @@
             <div class="stat-box">Phiếu bếp <strong id="statOrders">0</strong></div>
             <div class="stat-box">Chờ làm <strong id="statPending" style="color:var(--primary);">0</strong></div>
             <div class="stat-box">Bàn đang ngồi <strong id="statActiveTables" style="color:var(--blue);">0</strong></div>
-            <div class="stat-box">Doanh thu phiên <strong id="statRevenue" style="color:var(--green);">0đ</strong></div>
+            <div class="stat-box">Đang phục vụ <strong id="statServingRevenue" style="color:var(--amber);">0đ</strong></div>
+            <div class="stat-box">Đã thu <strong id="statRevenue" style="color:var(--green);">0đ</strong></div>
           </div>
           <div class="pos-actions">
             <button id="wakeLockBtn" class="btn-sm" onclick="toggleWakeLock()">☀️ Giữ sáng: TẮT</button>
@@ -401,10 +402,11 @@
           </div>
         </div>
 
-        <!-- Subtabs: Báo bếp | Tổng bill theo Bàn | Tạm hết món -->
+        <!-- Subtabs: Báo bếp | Tổng bill theo Bàn | Lịch sử đã phục vụ | Tạm hết món -->
         <div class="pos-subtabs">
           <button class="pos-subtab active" data-postab="kitchen" onclick="switchPosTab('kitchen')">🔥 Phiếu báo bếp <span id="subBadgeKitchen"></span></button>
           <button class="pos-subtab" data-postab="tables" onclick="switchPosTab('tables')">🧾 Tổng bill theo Bàn <span id="subBadgeTables"></span></button>
+          <button class="pos-subtab" data-postab="history" onclick="switchPosTab('history')">📜 Lịch sử đã phục vụ <span id="subBadgeHistory"></span></button>
           <button class="pos-subtab" data-postab="soldout" onclick="switchPosTab('soldout')">🚫 Tạm hết món <span id="subBadgeSoldout"></span></button>
         </div>
 
@@ -448,17 +450,40 @@
         <hr style="border:none; border-top:1px dashed var(--border); margin:12px 0 14px;" />
         <h3 style="font-size:15px; margin-bottom:10px;">💳 Tài khoản ngân hàng nhận VietQR</h3>
 
-        <label style="font-size:13px; font-weight:700;">Ngân hàng (Mã VietQR, VD: MB, VCB, TCB, ACB, BIDV, VPB, TPB, MBBank...):</label>
-        <input type="text" id="bankIdInput" class="input-field" placeholder="VD: MB" />
+        <label style="font-size:13px; font-weight:700;">Ngân hàng nhận tiền:</label>
+        <select id="bankIdInput" class="input-field" onchange="updateVietQRPreview()">
+          <option value="OCB">OCB - Ngân hàng Phương Đông</option>
+          <option value="MB">MB - Ngân hàng Quân Đội (MBBank)</option>
+          <option value="VCB">VCB - Vietcombank</option>
+          <option value="TCB">TCB - Techcombank</option>
+          <option value="BIDV">BIDV - Đầu tư & Phát triển</option>
+          <option value="ICB">VietinBank (ICB)</option>
+          <option value="ACB">ACB - Ngân hàng Á Châu</option>
+          <option value="VPB">VPBank</option>
+          <option value="TPB">TPBank</option>
+          <option value="VBA">Agribank</option>
+          <option value="STB">Sacombank</option>
+          <option value="VIB">VIB</option>
+          <option value="HDB">HDBank</option>
+          <option value="MSB">MSB - Hàng Hải</option>
+          <option value="SHB">SHB</option>
+          <option value="CAKE">CAKE by VPBank</option>
+        </select>
 
         <label style="font-size:13px; font-weight:700;">Số tài khoản:</label>
-        <input type="text" id="bankAccInput" class="input-field" placeholder="VD: 0123456789" />
+        <input type="text" id="bankAccInput" class="input-field" placeholder="VD: 0987846022" oninput="updateVietQRPreview()" />
 
         <label style="font-size:13px; font-weight:700;">Tên chủ tài khoản (không dấu):</label>
-        <input type="text" id="bankNameInput" class="input-field" placeholder="VD: NGUYEN VAN A" />
+        <input type="text" id="bankNameInput" class="input-field" placeholder="VD: LE BA TUAN" oninput="updateVietQRPreview()" />
+
+        <div id="vietqrPreviewBox" class="vietqr-box" style="margin-bottom:14px; text-align:center;">
+          <div style="font-size:12px; font-weight:700; color:var(--slate);">Xem trước mã VietQR (mẫu 10.000đ)</div>
+          <img id="vietqrPreviewImg" class="vietqr-img" src="" alt="Xem trước VietQR" />
+          <div id="vietqrPreviewText" style="font-size:12px; color:var(--slate);"></div>
+        </div>
 
         <div style="display:flex; gap:8px; margin-top:6px;">
-          <button class="btn-checkout" style="flex:1;" onclick="saveSettings()">💾 Lưu cài đặt & Kích hoạt</button>
+          <button class="btn-checkout" style="flex:1;" onclick="saveSettings()">💾 Lưu cài đặt & Đồng bộ sang ĐT khách</button>
           <button class="btn-sm" onclick="resetDefaultSettings()">Khôi phục mặc định</button>
         </div>
         <p id="syncStatusText" style="margin-top:12px; font-size:13px; color:var(--slate);"></p>
@@ -512,9 +537,9 @@
     // ====== 1. CẤU HÌNH MẶC ĐỊNH CỦA QUÁN (Chỉnh trực tiếp tại đây nếu muốn cố định cho mọi máy) ======
     const DEFAULT_CONFIG = {
       ntfyTopic: "bepnhaminh-pos-2026", // Kênh đồng bộ mặc định gắn cứng
-      bankId: "MB",                     // Mã ngân hàng VietQR (MB, VCB, TCB, ACB, BIDV, VPB...)
-      accountNo: "0123456789",          // Số tài khoản nhận tiền của quán
-      accountName: "BEP NHA MINH"       // Tên chủ tài khoản (không dấu)
+      bankId: "OCB",                    // Mã ngân hàng VietQR (OCB, MB, VCB, TCB, ACB, BIDV...)
+      accountNo: "0987846022",          // Số tài khoản nhận tiền của quán
+      accountName: "LE BA TUAN"         // Tên chủ tài khoản (không dấu)
     };
 
     const TABLES = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10"];
@@ -591,6 +616,7 @@
     const KEYS = {
       orders: "qr_pos_orders_v2",
       tableClears: "qr_pos_table_clears_v2",
+      paidHistory: "qr_pos_paid_history_v2",
       soldOut: "qr_pos_soldout_v2",
       staffCalls: "qr_pos_staff_calls_v2",
       settings: "qr_pos_settings_v2",
@@ -598,7 +624,13 @@
       cooldownCall: "qr_pos_cooldown_call_"
     };
 
-    let settings = { ...DEFAULT_CONFIG, ...JSON.parse(localStorage.getItem(KEYS.settings) || "{}") };
+    const savedSettings = JSON.parse(localStorage.getItem(KEYS.settings) || "{}");
+    if (savedSettings.accountNo === "0123456789") {
+      delete savedSettings.bankId;
+      delete savedSettings.accountNo;
+      delete savedSettings.accountName;
+    }
+    let settings = { ...DEFAULT_CONFIG, ...savedSettings };
     let currentTab = "split";
     let currentPosTab = "kitchen";
     let currentCat = "Tất cả";
@@ -606,6 +638,7 @@
     let cart = [];
     let orders = JSON.parse(localStorage.getItem(KEYS.orders) || "[]");
     let tableClears = JSON.parse(localStorage.getItem(KEYS.tableClears) || "{}");
+    let paidHistory = JSON.parse(localStorage.getItem(KEYS.paidHistory) || "[]");
     let soldOutIds = JSON.parse(localStorage.getItem(KEYS.soldOut) || "[]");
     let staffCalls = JSON.parse(localStorage.getItem(KEYS.staffCalls) || "[]");
 
@@ -623,6 +656,12 @@
     // ====== 3. TIỆN ÍCH & ÂM THANH & CHỐNG TẮT MÀN HÌNH ======
     const fmt = (n) => Number(n).toLocaleString("vi-VN") + "đ";
     const esc = (str) => String(str).replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    const fmtDateTime = (ts) => {
+      const d = new Date(ts || Date.now());
+      const hm = d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+      const dm = d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+      return `${hm} (${dm})`;
+    };
 
     function showToast(msg) {
       document.querySelectorAll(".toast").forEach(el => el.remove());
@@ -1145,16 +1184,19 @@
       const newCount = activeOrders.filter(o => o.status === "new").length;
       const pendingCount = activeOrders.filter(o => o.status !== "done").length;
       const activeBills = getActiveTableBills();
-      const revenue = orders.reduce((s, o) => s + o.total, 0);
+      const servingRevenue = activeBills.reduce((s, b) => s + b.total, 0);
+      const paidRevenue = paidHistory.reduce((s, h) => s + h.total, 0);
 
       document.getElementById("statOrders").textContent = activeOrders.length;
       document.getElementById("statPending").textContent = pendingCount;
       document.getElementById("statActiveTables").textContent = activeBills.length;
-      document.getElementById("statRevenue").textContent = fmt(revenue);
+      document.getElementById("statServingRevenue").textContent = fmt(servingRevenue);
+      document.getElementById("statRevenue").textContent = fmt(paidRevenue);
       document.getElementById("badgeNewCount").textContent = newCount ? `(${newCount})` : "";
 
       document.getElementById("subBadgeKitchen").textContent = pendingCount ? `(${pendingCount})` : "";
       document.getElementById("subBadgeTables").textContent = activeBills.length ? `(${activeBills.length})` : "";
+      document.getElementById("subBadgeHistory").textContent = paidHistory.length ? `(${paidHistory.length})` : "";
       document.getElementById("subBadgeSoldout").textContent = soldOutIds.length ? `(${soldOutIds.length})` : "";
 
       const board = document.getElementById("ordersBoard");
@@ -1232,6 +1274,80 @@
             </div>
           `;
         }).join("");
+      } else if (currentPosTab === "history") {
+        if (!paidHistory.length) {
+          board.innerHTML = `<div class="empty-state"><h3>Chưa có lịch sử bàn đã phục vụ</h3><p style="margin-top:6px;">Khi bạn bấm <b>✅ Thanh toán & Dọn bàn</b>, toàn bộ món ăn, thời gian và số tiền đã thu sẽ được lưu lại tại đây.</p></div>`;
+          return;
+        }
+        // Thống kê tổng món đã bán kèm thời gian gần nhất
+        const itemStats = {};
+        paidHistory.forEach(h => {
+          (h.detailedItems || h.mergedItems || []).forEach(it => {
+            const key = `${it.name}__${it.optText || ""}`;
+            if (!itemStats[key]) {
+              itemStats[key] = { name: it.name, optText: it.optText || "", qty: 0, total: 0, lastTime: h.paidTimeStr };
+            }
+            itemStats[key].qty += it.qty;
+            itemStats[key].total += it.qty * it.price;
+          });
+        });
+        const itemStatsArr = Object.values(itemStats).sort((a, b) => b.qty - a.qty);
+        const totalPaidAll = paidHistory.reduce((s, h) => s + h.total, 0);
+
+        board.style.gridTemplateColumns = "1fr";
+        board.innerHTML = `
+          <div class="card-box" style="padding:14px; background:#f8fafc;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+              <strong style="font-size:15px;">📊 Tổng kết món đã bán (${paidHistory.length} bàn đã thanh toán)</strong>
+              <strong style="color:var(--green); font-size:16px;">Tổng đã thu: ${fmt(totalPaidAll)}</strong>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:8px;">
+              ${itemStatsArr.map(st => `
+                <div style="background:#fff; border:1px solid var(--border); border-radius:10px; padding:8px 10px; font-size:12px;">
+                  <div style="font-weight:700;">${esc(st.name)}${st.optText ? ` <span style="font-weight:400; color:var(--slate);">(${esc(st.optText)})</span>` : ""}</div>
+                  <div style="display:flex; justify-content:space-between; margin-top:4px; color:var(--slate);">
+                    <span>SL: <b style="color:var(--dark);">${st.qty}</b></span>
+                    <b style="color:var(--primary);">${fmt(st.total)}</b>
+                  </div>
+                  <div style="font-size:11px; color:var(--slate); margin-top:2px;">Gần nhất: ${esc(st.lastTime)}</div>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:14px;">
+            ${paidHistory.map(h => `
+              <div class="order-card" style="border-color:#86efac;">
+                <div class="order-top">
+                  <div>
+                    <span class="badge-table" style="background:var(--green);">Bàn ${esc(h.table)}</span>
+                    <span style="font-size:11px; color:var(--slate); display:block; margin-top:4px;">
+                      🕒 Vào: <b>${esc(h.startTime || "")}</b> → Thu: <b>${esc(h.paidTimeStr)}</b>
+                    </span>
+                  </div>
+                  <span class="status-pill st-done">Đã thanh toán</span>
+                </div>
+                <ul class="order-items">
+                  ${(h.detailedItems || h.mergedItems || []).map(i => `
+                    <li>
+                      <span>
+                        <b>${i.qty}x</b> ${esc(i.name)}${i.optText ? ` <span style="font-size:11px; color:var(--slate);">(${esc(i.optText)})</span>` : ""}
+                        ${i.time ? `<span class="order-item-sub">🕒 Gọi lúc ${esc(i.time)}</span>` : ""}
+                      </span>
+                      <span>${fmt(i.qty * i.price)}</span>
+                    </li>
+                  `).join("")}
+                </ul>
+                ${h.notes ? `<div class="order-note">📝 ${esc(h.notes)}</div>` : ""}
+                <div class="order-total"><span>ĐÃ THU:</span><span style="color:var(--green); font-size:16px;">${fmt(h.total)}</span></div>
+                <div class="order-btns">
+                  <button class="btn-act btn-bill" style="flex:1;" onclick="openHistoryBillModal('${esc(h.id)}')">🧾 Xem / In lại Bill</button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `;
+        return;
       } else if (currentPosTab === "soldout") {
         board.style.gridTemplateColumns = "1fr";
         board.innerHTML = MENU_ITEMS.map(item => {
@@ -1263,11 +1379,66 @@
 
     async function clearTableBill(tableNum) {
       const nowTs = Date.now();
+      const bills = getActiveTableBills();
+      const tb = bills.find(b => b.table === tableNum);
+
+      let historyRecord = null;
+      if (tb) {
+        const sortedOrders = [...tb.orders].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+        const detailedItems = [];
+        sortedOrders.forEach(ord => {
+          ord.items.forEach(it => {
+            detailedItems.push({ ...it, time: ord.time || "" });
+          });
+        });
+        historyRecord = {
+          id: "hist_" + nowTs + "_" + tableNum,
+          table: tableNum,
+          startTime: sortedOrders[0] ? fmtDateTime(sortedOrders[0].createdAt) : fmtDateTime(nowTs),
+          paidAt: nowTs,
+          paidTimeStr: fmtDateTime(nowTs),
+          detailedItems,
+          mergedItems: Object.values(tb.mergedItems),
+          notes: sortedOrders.map(o => o.note).filter(Boolean).join(" | "),
+          total: tb.total
+        };
+        paidHistory.unshift(historyRecord);
+        localStorage.setItem(KEYS.paidHistory, JSON.stringify(paidHistory));
+      }
+
       tableClears[tableNum] = nowTs;
       localStorage.setItem(KEYS.tableClears, JSON.stringify(tableClears));
       renderPosBoard();
-      showToast(`Đã thanh toán & dọn Bàn ${tableNum}`);
-      await publishNtfy(`[CLEAR_TABLE:${JSON.stringify({ table: tableNum, ts: nowTs })}]`, "", "min");
+      showToast(`Đã thanh toán & lưu lịch sử Bàn ${tableNum}`);
+      await publishNtfy(`[CLEAR_TABLE:${JSON.stringify({ table: tableNum, ts: nowTs, record: historyRecord })}]`, "", "min");
+    }
+
+    function openHistoryBillModal(histId) {
+      const h = paidHistory.find(x => x.id === histId);
+      if (!h) return;
+      document.getElementById("btnPrintBill").classList.remove("hidden");
+      document.getElementById("vietqrSection").classList.add("hidden");
+      document.getElementById("billModalTitle").textContent = `🧾 Lịch sử Bill Bàn ${h.table}`;
+      const itemsList = h.mergedItems || h.detailedItems || [];
+      document.getElementById("billContent").innerHTML = `
+        <div style="text-align:center; font-weight:bold; margin-bottom:8px;">
+          BẾP NHÀ MÌNH<br/>PHIẾU ĐÃ THANH TOÁN - BÀN ${esc(h.table)}
+        </div>
+        <div>Vào: ${esc(h.startTime || "")}</div>
+        <div>Thanh toán: ${esc(h.paidTimeStr)}</div>
+        <hr style="margin:8px 0; border:none; border-top:1px dashed #94a3b8;"/>
+        ${itemsList.map(i => `
+          <div style="display:flex; justify-content:space-between; margin:4px 0;">
+            <span>${i.qty}x ${esc(i.name)}${i.optText ? ` (${esc(i.optText)})` : ""}</span>
+            <span>${fmt(i.qty * i.price)}</span>
+          </div>
+        `).join("")}
+        <hr style="margin:8px 0; border:none; border-top:1px dashed #94a3b8;"/>
+        <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:15px;">
+          <span>ĐÃ THANH TOÁN:</span><span>${fmt(h.total)}</span>
+        </div>
+      `;
+      document.getElementById("billModal").classList.remove("hidden");
     }
 
     async function toggleSoldOut(itemId) {
@@ -1281,16 +1452,18 @@
     }
 
     function clearOrders() {
-      if (!orders.length && !staffCalls.length) return;
+      if (!orders.length && !staffCalls.length && !paidHistory.length) return;
       orders = [];
       staffCalls = [];
       tableClears = {};
+      paidHistory = [];
       localStorage.setItem(KEYS.orders, "[]");
       localStorage.setItem(KEYS.staffCalls, "[]");
       localStorage.setItem(KEYS.tableClears, "{}");
+      localStorage.setItem(KEYS.paidHistory, "[]");
       renderStaffAlerts();
       renderPosBoard();
-      showToast("Đã xóa toàn bộ đơn test");
+      showToast("Đã xóa toàn bộ đơn và lịch sử");
     }
 
     // ====== 9. HÓA ĐƠN & VIETQR TỰ ĐỘNG ======
@@ -1388,13 +1561,29 @@
     // ====== 11. CÀI ĐẶT QUÁN & ĐỒNG BỘ 12H QUA NTFY.SH ======
     function fillSettingsForm() {
       document.getElementById("ntfyTopicInput").value = settings.ntfyTopic || "";
-      document.getElementById("bankIdInput").value = settings.bankId || "";
+      document.getElementById("bankIdInput").value = settings.bankId || "OCB";
       document.getElementById("bankAccInput").value = settings.accountNo || "";
       document.getElementById("bankNameInput").value = settings.accountName || "";
+      updateVietQRPreview();
       updateSyncStatus();
     }
 
-    function saveSettings() {
+    function updateVietQRPreview() {
+      const bankId = document.getElementById("bankIdInput").value.trim().toUpperCase();
+      const acc = document.getElementById("bankAccInput").value.trim();
+      const name = document.getElementById("bankNameInput").value.trim().toUpperCase();
+      const img = document.getElementById("vietqrPreviewImg");
+      const txt = document.getElementById("vietqrPreviewText");
+      if (!bankId || !acc) {
+        img.src = "";
+        txt.textContent = "Nhập đủ Ngân hàng & Số tài khoản để xem trước mã QR";
+        return;
+      }
+      img.src = `https://img.vietqr.io/image/${encodeURIComponent(bankId)}-${encodeURIComponent(acc)}-compact2.png?amount=10000&addInfo=${encodeURIComponent("TEST THU")}&accountName=${encodeURIComponent(name)}`;
+      txt.innerHTML = `<b>${esc(bankId)}</b> • STK: <b>${esc(acc)}</b>${name ? ` • <b>${esc(name)}</b>` : ""}`;
+    }
+
+    async function saveSettings() {
       const topic = document.getElementById("ntfyTopicInput").value.trim().replace(/[^a-zA-Z0-9_-]/g, "");
       if (!topic) return showToast("Vui lòng nhập mã kênh hợp lệ (không dấu, không cách)");
       settings = {
@@ -1407,14 +1596,17 @@
       connectNtfySSE();
       pullHistory12h(false);
       updateSyncStatus();
-      showToast("Đã lưu cài đặt quán & VietQR!");
+      updateVietQRPreview();
+      await publishNtfy(`[BANK_CONFIG:${JSON.stringify({ bankId: settings.bankId, accountNo: settings.accountNo, accountName: settings.accountName })}]`, "", "min");
+      showToast("Đã lưu & đồng bộ cài đặt VietQR!");
     }
 
-    function resetDefaultSettings() {
+    async function resetDefaultSettings() {
       settings = { ...DEFAULT_CONFIG };
       localStorage.setItem(KEYS.settings, JSON.stringify(settings));
       fillSettingsForm();
       connectNtfySSE();
+      await publishNtfy(`[BANK_CONFIG:${JSON.stringify({ bankId: settings.bankId, accountNo: settings.accountNo, accountName: settings.accountName })}]`, "", "min");
       showToast("Đã khôi phục cài đặt mặc định");
     }
 
@@ -1441,11 +1633,31 @@
       const clearMatch = msgText.match(/\[CLEAR_TABLE:(\{.*\})\]/);
       if (clearMatch) {
         try {
-          const { table, ts } = JSON.parse(clearMatch[1]);
+          const { table, ts, record } = JSON.parse(clearMatch[1]);
           if (ts > (tableClears[table] || 0)) {
             tableClears[table] = ts;
             localStorage.setItem(KEYS.tableClears, JSON.stringify(tableClears));
-            if (!isCustomerQRMode) renderPosBoard();
+          }
+          if (record && !paidHistory.some(h => h.id === record.id)) {
+            paidHistory.unshift(record);
+            paidHistory.sort((a, b) => (b.paidAt || 0) - (a.paidAt || 0));
+            localStorage.setItem(KEYS.paidHistory, JSON.stringify(paidHistory));
+          }
+          if (!isCustomerQRMode) renderPosBoard();
+        } catch (e) {}
+        return;
+      }
+
+      const bankMatch = msgText.match(/\[BANK_CONFIG:(\{.*\})\]/);
+      if (bankMatch) {
+        try {
+          const bc = JSON.parse(bankMatch[1]);
+          if (bc.bankId && bc.accountNo) {
+            settings.bankId = bc.bankId;
+            settings.accountNo = bc.accountNo;
+            settings.accountName = bc.accountName || "";
+            localStorage.setItem(KEYS.settings, JSON.stringify(settings));
+            if (!isCustomerQRMode && currentTab === "sync") fillSettingsForm();
           }
         } catch (e) {}
         return;
