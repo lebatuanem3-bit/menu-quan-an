@@ -63,10 +63,15 @@
     body.customer-only .topbar { display: none !important; }
     body.customer-only .workspace { padding: 0; max-width: 100%; }
     body.customer-only #mainGrid { max-width: 540px; margin: 0 auto; width: 100%; }
+    html:has(body.customer-only), body.customer-only { height: 100%; overflow: hidden; overscroll-behavior: none; }
+    body.customer-only .workspace { position: fixed; inset: 0; overflow: hidden; }
+    body.customer-only #mainGrid { height: 100%; }
     body.customer-only .phone-frame {
       border: none; border-radius: 0; box-shadow: none;
-      height: 100vh; height: 100dvh; max-height: none; min-height: 100vh;
+      position: absolute; inset: 0; width: 100%;
+      height: 100%; max-height: none; min-height: 0;
     }
+    .menu-list { overscroll-behavior: contain; min-height: 0; }
 
     .cust-header {
       background: linear-gradient(135deg, #ea580c, #f97316); color: #fff; padding: 14px 16px;
