@@ -328,7 +328,7 @@
         <div class="cust-header">
           <div>
             <h2>🍜 Bếp Nhà Mình</h2>
-            <small>Chọn món bên dưới • Phục vụ tại bàn</small>
+            <small id="custSub">Chọn món bên dưới • Phục vụ tại bàn</small>
           </div>
           <div class="cust-header-right">
             <select id="tableSelect" class="table-select" onchange="changeTable(this.value)"></select>
@@ -501,6 +501,32 @@
     </div>
   </div>
 
+  <!-- Guest Name Modal (bắt buộc nhập tên sau khi quét QR) -->
+  <div id="nameModal" class="modal-backdrop hidden" style="z-index:250;">
+    <div class="modal-box">
+      <div style="font-size:42px; margin-bottom:6px;">👋</div>
+      <h3 style="margin-bottom:6px;">Chào mừng đến Bếp Nhà Mình!</h3>
+      <p style="font-size:13px; color:var(--slate); line-height:1.5; margin-bottom:12px;">
+        Bạn đang ngồi <b>Bàn <span id="nameModalTable">01</span></b>.<br/>Vui lòng nhập tên để quán biết ai gọi món và thanh toán đúng nhóm:
+      </p>
+      <input type="text" id="guestNameInput" class="input-field" maxlength="20" placeholder="VD: Anh Tuấn" style="font-size:16px; text-align:center;" onkeydown="if(event.key==='Enter') confirmGuestName()" />
+      <button class="btn-checkout" style="width:100%; padding:13px;" onclick="confirmGuestName()">Bắt đầu gọi món</button>
+    </div>
+  </div>
+
+  <!-- Move Order Modal (Chủ quán đổi nhóm cho phiếu gọi nhầm) -->
+  <div id="moveModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeMoveModal()">
+    <div class="modal-box">
+      <h3 style="margin-bottom:8px;">↪ Đổi nhóm cho phiếu</h3>
+      <p id="moveInfoText" style="font-size:13px; color:var(--slate); line-height:1.5; margin-bottom:10px;"></p>
+      <select id="moveTargetSelect" class="input-field"></select>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-checkout" style="flex:1;" onclick="confirmMove()">Chuyển</button>
+        <button class="btn-sm" style="flex:1; justify-content:center;" onclick="closeMoveModal()">Hủy</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Customer Call Staff Modal -->
   <div id="callStaffModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeCallStaffModal()">
     <div class="modal-box">
@@ -617,6 +643,11 @@
       orders: "qr_pos_orders_v2",
       tableClears: "qr_pos_table_clears_v2",
       paidHistory: "qr_pos_paid_history_v2",
+      paidIds: "qr_pos_paid_ids_v3",
+      merges: "qr_pos_merges_v3",
+      moves: "qr_pos_moves_v3",
+      guest: "qr_pos_guest_v3",
+      deviceId: "qr_pos_device_id_v3",
       soldOut: "qr_pos_soldout_v2",
       staffCalls: "qr_pos_staff_calls_v2",
       settings: "qr_pos_settings_v2",
@@ -639,6 +670,10 @@
     let orders = JSON.parse(localStorage.getItem(KEYS.orders) || "[]");
     let tableClears = JSON.parse(localStorage.getItem(KEYS.tableClears) || "{}");
     let paidHistory = JSON.parse(localStorage.getItem(KEYS.paidHistory) || "[]");
+    let paidIds = JSON.parse(localStorage.getItem(KEYS.paidIds) || "{}");
+    let merges = JSON.parse(localStorage.getItem(KEYS.merges) || "{}");
+    let orderMoves = JSON.parse(localStorage.getItem(KEYS.moves) || "{}");
+    const mergeSelection = new Set();
     let soldOutIds = JSON.parse(localStorage.getItem(KEYS.soldOut) || "[]");
     let staffCalls = JSON.parse(localStorage.getItem(KEYS.staffCalls) || "[]");
 
@@ -836,6 +871,7 @@
       document.getElementById("drawerTableNum").textContent = val;
       document.getElementById("callTableNum").textContent = val;
       document.getElementById("tableBadgeFixed").textContent = "Bàn " + val;
+      updateGuestBadge();
       updateCartUI();
       checkOrderCooldownUI();
     }
@@ -1028,6 +1064,11 @@
 
     async function submitOrder() {
       if (!cart.length) return;
+      const guest = getGuest();
+      if (!guest) {
+        showNameModal(true);
+        return;
+      }
       const lastTs = Number(localStorage.getItem(KEYS.cooldownOrder + currentTable) || 0);
       if (Date.now() - lastTs < 20000) {
         return showToast("Bạn vừa gửi đơn xong, vui lòng đợi vài giây!");
@@ -1037,6 +1078,8 @@
       const order = {
         id: String(Math.floor(1000 + Math.random() * 9000)) + String(now.getSeconds()).padStart(2, "0"),
         table: currentTable,
+        guest: guest.name,
+        guestId: deviceId(),
         items: cart.map(i => ({ name: i.name, optText: i.optText || "", qty: i.qty, price: i.price })),
         note: document.getElementById("orderNote").value.trim(),
         total: cart.reduce((s, i) => s + i.qty * i.price, 0),
@@ -1052,7 +1095,7 @@
       receiveOrder(order, true, !isCustomerQRMode);
 
       const lines = [
-        `🍜 ĐƠN MỚI - BÀN ${order.table} (#${order.id})`,
+        `🍜 ĐƠN MỚI - BÀN ${order.table} - ${order.guest} (#${order.id})`,
         ...order.items.map(i => `• ${i.qty}x ${i.name}${i.optText ? ` (${i.optText})` : ""} - ${fmt(i.qty * i.price)}`),
         order.note ? `📝 Ghi chú: ${order.note}` : "",
         `💰 Tổng đợt này: ${fmt(order.total)}`,
@@ -1156,50 +1199,121 @@
       }
     }
 
-    function getActiveTableBills() {
-      const tableMap = {};
-      // Lọc các đơn chưa bị dọn bàn (createdAt > tableClears[table])
-      orders.forEach(o => {
-        const clearTs = tableClears[o.table] || 0;
-        if ((o.createdAt || 0) <= clearTs) return;
-        if (!tableMap[o.table]) {
-          tableMap[o.table] = { table: o.table, orders: [], mergedItems: {}, total: 0, latestTime: o.time };
-        }
-        const tb = tableMap[o.table];
-        tb.orders.push(o);
-        tb.total += o.total;
-        o.items.forEach(it => {
-          const key = `${it.name}__${it.optText || ""}__${it.price}`;
-          if (!tb.mergedItems[key]) {
-            tb.mergedItems[key] = { name: it.name, optText: it.optText || "", price: it.price, qty: 0 };
-          }
-          tb.mergedItems[key].qty += it.qty;
-        });
-      });
-      return Object.values(tableMap).sort((a, b) => a.table.localeCompare(b.table));
+        // ====== NHÓM KHÁCH THEO TÊN & GỘP NHÓM ======
+    function isPaid(o) {
+      return !!paidIds[o.id] || (o.createdAt || 0) <= (tableClears[o.table] || 0);
     }
 
+    function effGuest(o) {
+      const mv = orderMoves[o.id];
+      return {
+        guestId: mv ? mv.guestId : (o.guestId || "legacy"),
+        guest: mv ? mv.guest : (o.guest || "Khách")
+      };
+    }
+
+    function buildGroups() {
+      const map = {};
+      [...orders].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0)).forEach(o => {
+        if (isPaid(o)) return;
+        const g = effGuest(o);
+        const key = `${o.table}_${g.guestId}`;
+        if (!map[key]) {
+          map[key] = { key, table: o.table, guestId: g.guestId, baseName: g.guest, orders: [], mergedItems: {}, total: 0, firstAt: o.createdAt || 0, latestTime: o.time };
+        }
+        const gr = map[key];
+        gr.orders.push(o);
+        gr.total += o.total;
+        gr.latestTime = o.time;
+        o.items.forEach(it => {
+          const k = `${it.name}__${it.optText || ""}__${it.price}`;
+          if (!gr.mergedItems[k]) gr.mergedItems[k] = { name: it.name, optText: it.optText || "", price: it.price, qty: 0 };
+          gr.mergedItems[k].qty += it.qty;
+        });
+      });
+      const groups = Object.values(map).sort((a, b) => a.firstAt - b.firstAt);
+      const byTable = {};
+      groups.forEach(gr => { (byTable[gr.table] = byTable[gr.table] || []).push(gr); });
+      Object.values(byTable).forEach(list => {
+        const cnt = {};
+        list.forEach(gr => { cnt[gr.baseName] = (cnt[gr.baseName] || 0) + 1; });
+        const idx = {};
+        list.forEach(gr => {
+          if (cnt[gr.baseName] > 1) {
+            idx[gr.baseName] = (idx[gr.baseName] || 0) + 1;
+            gr.name = `${gr.baseName} ${idx[gr.baseName]}`;
+          } else {
+            gr.name = gr.baseName;
+          }
+        });
+      });
+      return groups;
+    }
+
+    function buildUnits() {
+      const groups = buildGroups();
+      const byKey = {};
+      groups.forEach(g => { byKey[g.key] = g; });
+      const used = new Set();
+      const units = [];
+      Object.values(merges).filter(m => !m.removed).sort((a, b) => (a.ts || 0) - (b.ts || 0)).forEach(m => {
+        const members = (m.keys || []).map(k => byKey[k]).filter(Boolean).filter(g => !used.has(g.key));
+        if (members.length < 2) return;
+        members.forEach(g => used.add(g.key));
+        units.push({
+          uid: "m:" + m.id, merge: m, groups: members,
+          tables: [...new Set(members.map(g => g.table))].sort(),
+          total: members.reduce((s, g) => s + g.total, 0)
+        });
+      });
+      groups.forEach(g => {
+        if (!used.has(g.key)) units.push({ uid: "g:" + g.key, merge: null, groups: [g], tables: [g.table], total: g.total });
+      });
+      return units.sort((a, b) => a.tables[0].localeCompare(b.tables[0]) || a.groups[0].firstAt - b.groups[0].firstAt);
+    }
+
+    function unitLabel(u) {
+      if (u.groups.length === 1) return u.groups[0].name;
+      return "Gộp: " + u.groups.map(g => `${g.name} (B${g.table})`).join(" + ");
+    }
+
+    function unitQrInfo(u) {
+      if (u.groups.length > 1) return `TT BAN ${u.tables.join("+")}`;
+      const g = u.groups[0];
+      const nm = noAccent(g.name).toUpperCase().replace(/[^A-Z0-9 ]/g, "").trim().slice(0, 20);
+      return `TT BAN ${g.table} ${nm}`.trim();
+    }
+
+    const itemLis = (items) => items.map(i => `
+      <li>
+        <span><b>${i.qty}x</b> ${esc(i.name)}${i.optText ? `<span class="order-item-sub">${esc(i.optText)}</span>` : ""}</span>
+        <span>${fmt(i.qty * i.price)}</span>
+      </li>`).join("");
+
     function renderPosBoard() {
-      const activeOrders = orders.filter(o => (o.createdAt || 0) > (tableClears[o.table] || 0));
+      const activeOrders = orders.filter(o => !isPaid(o));
       const newCount = activeOrders.filter(o => o.status === "new").length;
       const pendingCount = activeOrders.filter(o => o.status !== "done").length;
-      const activeBills = getActiveTableBills();
-      const servingRevenue = activeBills.reduce((s, b) => s + b.total, 0);
+      const units = buildUnits();
+      const allGroups = units.flatMap(u => u.groups);
+      const activeTableCount = new Set(allGroups.map(g => g.table)).size;
+      const servingRevenue = units.reduce((s, u) => s + u.total, 0);
       const paidRevenue = paidHistory.reduce((s, h) => s + h.total, 0);
 
       document.getElementById("statOrders").textContent = activeOrders.length;
       document.getElementById("statPending").textContent = pendingCount;
-      document.getElementById("statActiveTables").textContent = activeBills.length;
+      document.getElementById("statActiveTables").textContent = activeTableCount;
       document.getElementById("statServingRevenue").textContent = fmt(servingRevenue);
       document.getElementById("statRevenue").textContent = fmt(paidRevenue);
       document.getElementById("badgeNewCount").textContent = newCount ? `(${newCount})` : "";
 
       document.getElementById("subBadgeKitchen").textContent = pendingCount ? `(${pendingCount})` : "";
-      document.getElementById("subBadgeTables").textContent = activeBills.length ? `(${activeBills.length})` : "";
+      document.getElementById("subBadgeTables").textContent = units.length ? `(${units.length})` : "";
       document.getElementById("subBadgeHistory").textContent = paidHistory.length ? `(${paidHistory.length})` : "";
       document.getElementById("subBadgeSoldout").textContent = soldOutIds.length ? `(${soldOutIds.length})` : "";
 
       const board = document.getElementById("ordersBoard");
+      board.style.gridTemplateColumns = "";
 
       if (currentPosTab === "kitchen") {
         if (!activeOrders.length) {
@@ -1213,63 +1327,91 @@
             done: { text: "Đã ra món", cls: "st-done" }
           };
           const st = stMap[o.status] || stMap.new;
+          const gu = effGuest(o);
           return `
             <div class="order-card ${o.status === 'new' ? 'new-order' : ''}">
               <div class="order-top">
                 <div>
                   <span class="badge-table">Bàn ${esc(o.table)}</span>
                   <span style="font-size:12px; color:var(--slate); margin-left:6px;">#${esc(o.id)} • ${esc(o.time)}</span>
+                  <div style="font-size:13px; font-weight:700; margin-top:5px;">👤 ${esc(gu.guest)}</div>
                 </div>
                 <span class="status-pill ${st.cls}">${st.text}</span>
               </div>
-              <ul class="order-items">
-                ${o.items.map(i => `
-                  <li>
-                    <span><b>${i.qty}x</b> ${esc(i.name)}${i.optText ? `<span class="order-item-sub">${esc(i.optText)}</span>` : ""}</span>
-                    <span>${fmt(i.qty * i.price)}</span>
-                  </li>
-                `).join("")}
-              </ul>
+              <ul class="order-items">${itemLis(o.items)}</ul>
               ${o.note ? `<div class="order-note">📝 ${esc(o.note)}</div>` : ""}
               <div class="order-total"><span>Đợt gọi này:</span><span style="color:var(--primary);">${fmt(o.total)}</span></div>
               <div class="order-btns">
                 ${o.status === "new" ? `<button class="btn-act btn-confirm" onclick="setOrderStatus('${esc(o.id)}','cooking')">👨‍🍳 Nhận & Làm</button>` : ""}
                 ${o.status === "cooking" ? `<button class="btn-act btn-done" onclick="setOrderStatus('${esc(o.id)}','done')">✅ Đã ra món</button>` : ""}
-                <button class="btn-act btn-bill" onclick="openTableBillModal('${esc(o.table)}', true)">🧾 Bill Bàn</button>
+                <button class="btn-act btn-bill" onclick="openUnitBillByOrder('${esc(o.id)}')">🧾 Bill</button>
+                <button class="btn-act btn-bill" onclick="openMoveModal('${esc(o.id)}')">↪ Đổi nhóm</button>
               </div>
             </div>
           `;
         }).join("");
       } else if (currentPosTab === "tables") {
-        if (!activeBills.length) {
-          board.innerHTML = `<div class="empty-state"><h3>Tất cả các bàn đang trống</h3><p style="margin-top:6px;">Các đợt gọi món của cùng một bàn sẽ tự động cộng dồn vào đây để thu ngân tính tiền 1 lần.</p></div>`;
+        if (!units.length) {
+          board.innerHTML = `<div class="empty-state"><h3>Tất cả các bàn đang trống</h3><p style="margin-top:6px;">Mỗi khách (theo tên nhập khi quét QR) có một bill riêng. Các đợt gọi thêm của cùng một người tự cộng dồn tại đây.</p></div>`;
           return;
         }
-        board.innerHTML = activeBills.map(tb => {
-          const itemsList = Object.values(tb.mergedItems);
-          const notes = tb.orders.map(o => o.note).filter(Boolean);
+        const validKeys = new Set(allGroups.map(g => g.key));
+        mergeSelection.forEach(k => { if (!validKeys.has(k)) mergeSelection.delete(k); });
+        const selCount = mergeSelection.size;
+
+        const toolbar = `
+          <div style="grid-column:1/-1; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:12px; padding:10px 12px;">
+            <span style="font-size:13px; color:var(--slate);">☑️ Tick chọn các nhóm muốn thanh toán chung (kể cả khác bàn) rồi bấm Gộp.</span>
+            <button class="btn-sm" ${selCount < 2 ? "disabled" : ""} style="${selCount >= 2 ? "background:var(--amber); color:#fff; border-color:var(--amber);" : "opacity:0.5;"}" onclick="mergeSelected()">🔗 Gộp nhóm đã chọn (${selCount})</button>
+          </div>`;
+
+        board.innerHTML = toolbar + units.map(u => {
+          if (u.groups.length === 1) {
+            const g = u.groups[0];
+            const checked = mergeSelection.has(g.key) ? "checked" : "";
+            return `
+              <div class="order-card" style="border-color:#93c5fd;">
+                <div class="order-top">
+                  <div>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                      <input type="checkbox" ${checked} onchange="toggleMergeSel('${esc(g.key)}')" style="width:18px; height:18px;" />
+                      <span class="badge-table" style="background:var(--blue);">Bàn ${esc(g.table)}</span>
+                      <b style="font-size:14px;">👤 ${esc(g.name)}</b>
+                    </label>
+                    <span style="font-size:11px; color:var(--slate); display:block; margin-top:4px;">${g.orders.length} lượt gọi • vào lúc ${esc(fmtDateTime(g.firstAt))}</span>
+                  </div>
+                  <span class="status-pill st-cooking">Đang phục vụ</span>
+                </div>
+                <ul class="order-items">${itemLis(Object.values(g.mergedItems))}</ul>
+                <div class="order-total"><span>BILL ${esc(g.name.toUpperCase())}:</span><span style="color:var(--primary); font-size:17px;">${fmt(g.total)}</span></div>
+                <div class="order-btns">
+                  <button class="btn-act btn-bill" onclick="openUnitBillModal('${esc(u.uid)}', true)">🧾 Bill & QR</button>
+                  <button class="btn-act btn-clear-table" onclick="payUnit('${esc(u.uid)}')">✅ Thanh toán nhóm này</button>
+                </div>
+              </div>
+            `;
+          }
           return `
-            <div class="order-card" style="border-color:#93c5fd;">
+            <div class="order-card" style="border:2px solid var(--amber); background:#fffbeb;">
               <div class="order-top">
                 <div>
-                  <span class="badge-table" style="background:var(--blue);">Bàn ${esc(tb.table)}</span>
-                  <span style="font-size:12px; color:var(--slate); margin-left:6px;">${tb.orders.length} lượt gọi</span>
+                  <span class="badge-table" style="background:var(--amber);">🔗 BILL GỘP</span>
+                  <span style="font-size:11px; color:var(--slate); display:block; margin-top:4px;">${u.groups.length} nhóm • Bàn ${esc(u.tables.join(", "))}</span>
                 </div>
-                <span class="status-pill st-cooking">Đang phục vụ</span>
+                <span class="status-pill st-new">Chờ thanh toán chung</span>
               </div>
-              <ul class="order-items">
-                ${itemsList.map(i => `
-                  <li>
-                    <span><b>${i.qty}x</b> ${esc(i.name)}${i.optText ? `<span class="order-item-sub">${esc(i.optText)}</span>` : ""}</span>
-                    <span>${fmt(i.qty * i.price)}</span>
-                  </li>
-                `).join("")}
-              </ul>
-              ${notes.length ? `<div class="order-note">📝 ${esc(notes.join(" | "))}</div>` : ""}
-              <div class="order-total"><span>TỔNG BILL BÀN:</span><span style="color:var(--primary); font-size:17px;">${fmt(tb.total)}</span></div>
+              ${u.groups.map(g => `
+                <div style="margin-bottom:8px;">
+                  <div style="font-weight:700; font-size:13px; margin-bottom:4px;">👤 ${esc(g.name)} — Bàn ${esc(g.table)}</div>
+                  <ul class="order-items">${itemLis(Object.values(g.mergedItems))}</ul>
+                  <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--slate);"><span>Tạm tính</span><b>${fmt(g.total)}</b></div>
+                </div>
+              `).join('<hr style="border:none; border-top:1px dashed #fcd34d; margin:6px 0;"/>')}
+              <div class="order-total"><span>TỔNG BILL GỘP:</span><span style="color:var(--primary); font-size:17px;">${fmt(u.total)}</span></div>
               <div class="order-btns">
-                <button class="btn-act btn-bill" onclick="openTableBillModal('${esc(tb.table)}', true)">🧾 Bill & QR</button>
-                <button class="btn-act btn-clear-table" onclick="clearTableBill('${esc(tb.table)}')">✅ Thanh toán & Dọn bàn</button>
+                <button class="btn-act btn-bill" onclick="openUnitBillModal('${esc(u.uid)}', true)">🧾 Bill & QR gộp</button>
+                <button class="btn-act btn-clear-table" onclick="payUnit('${esc(u.uid)}')">✅ Thanh toán gộp</button>
+                <button class="btn-act" style="background:var(--slate);" onclick="unmergeUnit('${esc(u.merge.id)}')">✂️ Tách ra</button>
               </div>
             </div>
           `;
@@ -1321,6 +1463,7 @@
                 <div class="order-top">
                   <div>
                     <span class="badge-table" style="background:var(--green);">Bàn ${esc(h.table)}</span>
+                    ${h.label ? `<b style="font-size:13px; margin-left:4px;">👤 ${esc(h.label)}</b>` : ""}
                     <span style="font-size:11px; color:var(--slate); display:block; margin-top:4px;">
                       🕒 Vào: <b>${esc(h.startTime || "")}</b> → Thu: <b>${esc(h.paidTimeStr)}</b>
                     </span>
@@ -1332,7 +1475,7 @@
                     <li>
                       <span>
                         <b>${i.qty}x</b> ${esc(i.name)}${i.optText ? ` <span style="font-size:11px; color:var(--slate);">(${esc(i.optText)})</span>` : ""}
-                        ${i.time ? `<span class="order-item-sub">🕒 Gọi lúc ${esc(i.time)}</span>` : ""}
+                        ${(i.who || i.time) ? `<span class="order-item-sub">${i.who ? `👤 ${esc(i.who)} • ` : ""}${i.time ? `🕒 Gọi lúc ${esc(i.time)}` : ""}</span>` : ""}
                       </span>
                       <span>${fmt(i.qty * i.price)}</span>
                     </li>
@@ -1377,40 +1520,124 @@
       renderPosBoard();
     }
 
-    async function clearTableBill(tableNum) {
-      const nowTs = Date.now();
-      const bills = getActiveTableBills();
-      const tb = bills.find(b => b.table === tableNum);
+        // ====== THANH TOÁN THEO NHÓM / GỘP NHÓM / ĐỔI NHÓM ======
+    function buildHistoryRecord(recId, ids, label, paidAt) {
+      const idSet = new Set(ids);
+      const list = orders.filter(o => idSet.has(o.id)).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      const detailedItems = [];
+      const tables = new Set();
+      const notes = [];
+      let total = 0;
+      list.forEach(o => {
+        const g = effGuest(o);
+        tables.add(o.table);
+        total += o.total;
+        if (o.note) notes.push(o.note);
+        o.items.forEach(it => detailedItems.push({ ...it, time: o.time || "", who: `${g.guest} (Bàn ${o.table})` }));
+      });
+      const merged = {};
+      detailedItems.forEach(i => {
+        const k = `${i.name}__${i.optText || ""}__${i.price}`;
+        if (!merged[k]) merged[k] = { name: i.name, optText: i.optText || "", price: i.price, qty: 0 };
+        merged[k].qty += i.qty;
+      });
+      return {
+        id: recId,
+        table: [...tables].sort().join("+"),
+        label,
+        startTime: list[0] ? fmtDateTime(list[0].createdAt) : fmtDateTime(paidAt),
+        paidAt,
+        paidTimeStr: fmtDateTime(paidAt),
+        detailedItems,
+        mergedItems: Object.values(merged),
+        notes: notes.join(" | "),
+        total,
+        orderIds: ids
+      };
+    }
 
-      let historyRecord = null;
-      if (tb) {
-        const sortedOrders = [...tb.orders].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-        const detailedItems = [];
-        sortedOrders.forEach(ord => {
-          ord.items.forEach(it => {
-            detailedItems.push({ ...it, time: ord.time || "" });
-          });
-        });
-        historyRecord = {
-          id: "hist_" + nowTs + "_" + tableNum,
-          table: tableNum,
-          startTime: sortedOrders[0] ? fmtDateTime(sortedOrders[0].createdAt) : fmtDateTime(nowTs),
-          paidAt: nowTs,
-          paidTimeStr: fmtDateTime(nowTs),
-          detailedItems,
-          mergedItems: Object.values(tb.mergedItems),
-          notes: sortedOrders.map(o => o.note).filter(Boolean).join(" | "),
-          total: tb.total
-        };
-        paidHistory.unshift(historyRecord);
+    function applyPaid(recId, ids, label, paidAt) {
+      (ids || []).forEach(id => { paidIds[id] = 1; });
+      localStorage.setItem(KEYS.paidIds, JSON.stringify(paidIds));
+      if (!paidHistory.some(h => h.id === recId)) {
+        paidHistory.unshift(buildHistoryRecord(recId, ids || [], label || "", paidAt || Date.now()));
+        paidHistory.sort((a, b) => (b.paidAt || 0) - (a.paidAt || 0));
         localStorage.setItem(KEYS.paidHistory, JSON.stringify(paidHistory));
       }
+      if (!isCustomerQRMode) renderPosBoard();
+    }
 
-      tableClears[tableNum] = nowTs;
-      localStorage.setItem(KEYS.tableClears, JSON.stringify(tableClears));
+    async function payUnit(uid) {
+      const u = buildUnits().find(x => x.uid === uid);
+      if (!u) return showToast("Bill này không còn nữa");
+      const label = unitLabel(u);
+      if (!confirm(`Xác nhận ĐÃ THU TIỀN ${fmt(u.total)} của:\n${label}?`)) return;
+      const ids = u.groups.flatMap(g => g.orders.map(o => o.id));
+      const nowTs = Date.now();
+      const recId = "hist_" + nowTs + "_" + Math.random().toString(36).slice(2, 6);
+      applyPaid(recId, ids, label, nowTs);
+      showToast(`Đã thanh toán & lưu lịch sử: ${label}`);
+      await publishNtfy(`[PAID:${JSON.stringify({ recId, ids, label, paidAt: nowTs })}]`, "", "min");
+    }
+
+    function toggleMergeSel(key) {
+      if (mergeSelection.has(key)) mergeSelection.delete(key);
+      else mergeSelection.add(key);
       renderPosBoard();
-      showToast(`Đã thanh toán & lưu lịch sử Bàn ${tableNum}`);
-      await publishNtfy(`[CLEAR_TABLE:${JSON.stringify({ table: tableNum, ts: nowTs, record: historyRecord })}]`, "", "min");
+    }
+
+    async function mergeSelected() {
+      const keys = [...mergeSelection];
+      if (keys.length < 2) return showToast("Hãy chọn ít nhất 2 nhóm để gộp");
+      const id = "mg" + Date.now().toString(36);
+      const m = { id, keys, ts: Date.now() };
+      merges[id] = m;
+      localStorage.setItem(KEYS.merges, JSON.stringify(merges));
+      mergeSelection.clear();
+      renderPosBoard();
+      showToast("Đã gộp nhóm — thanh toán chung 1 bill");
+      await publishNtfy(`[MERGE:${JSON.stringify(m)}]`, "", "min");
+    }
+
+    async function unmergeUnit(mergeId) {
+      const ts = Date.now();
+      merges[mergeId] = { ...(merges[mergeId] || { id: mergeId, keys: [] }), removed: true, ts: (merges[mergeId] && merges[mergeId].ts) || ts };
+      localStorage.setItem(KEYS.merges, JSON.stringify(merges));
+      renderPosBoard();
+      showToast("Đã tách bill gộp");
+      await publishNtfy(`[UNMERGE:${JSON.stringify({ id: mergeId, ts })}]`, "", "min");
+    }
+
+    let pendingMoveOrderId = null;
+    function openMoveModal(orderId) {
+      const o = orders.find(x => x.id === orderId);
+      if (!o) return;
+      const cur = effGuest(o);
+      const targets = buildGroups().filter(g => g.table === o.table && g.guestId !== cur.guestId);
+      if (!targets.length) return showToast("Bàn này chưa có nhóm khác để chuyển sang");
+      pendingMoveOrderId = orderId;
+      document.getElementById("moveInfoText").textContent = `Phiếu #${o.id} đang thuộc nhóm "${cur.guest}" (Bàn ${o.table}). Chuyển sang nhóm:`;
+      document.getElementById("moveTargetSelect").innerHTML = targets.map(g => `<option value="${esc(g.guestId)}" data-name="${esc(g.baseName)}">${esc(g.name)}</option>`).join("");
+      document.getElementById("moveModal").classList.remove("hidden");
+    }
+
+    function closeMoveModal() {
+      document.getElementById("moveModal").classList.add("hidden");
+      pendingMoveOrderId = null;
+    }
+
+    async function confirmMove() {
+      if (!pendingMoveOrderId) return;
+      const sel = document.getElementById("moveTargetSelect");
+      const opt = sel.options[sel.selectedIndex];
+      if (!opt) return;
+      const mv = { orderId: pendingMoveOrderId, guestId: opt.value, guest: opt.dataset.name, ts: Date.now() };
+      orderMoves[mv.orderId] = mv;
+      localStorage.setItem(KEYS.moves, JSON.stringify(orderMoves));
+      closeMoveModal();
+      renderPosBoard();
+      showToast("Đã chuyển phiếu sang nhóm khác");
+      await publishNtfy(`[MOVE:${JSON.stringify(mv)}]`, "", "min");
     }
 
     function openHistoryBillModal(histId) {
@@ -1424,6 +1651,7 @@
         <div style="text-align:center; font-weight:bold; margin-bottom:8px;">
           BẾP NHÀ MÌNH<br/>PHIẾU ĐÃ THANH TOÁN - BÀN ${esc(h.table)}
         </div>
+        ${h.label ? `<div>Khách: <b>${esc(h.label)}</b></div>` : ""}
         <div>Vào: ${esc(h.startTime || "")}</div>
         <div>Thanh toán: ${esc(h.paidTimeStr)}</div>
         <hr style="margin:8px 0; border:none; border-top:1px dashed #94a3b8;"/>
@@ -1441,7 +1669,7 @@
       document.getElementById("billModal").classList.remove("hidden");
     }
 
-    async function toggleSoldOut(itemId) {
+async function toggleSoldOut(itemId) {
       const idx = soldOutIds.indexOf(itemId);
       if (idx >= 0) soldOutIds.splice(idx, 1);
       else soldOutIds.push(itemId);
@@ -1457,6 +1685,13 @@
       staffCalls = [];
       tableClears = {};
       paidHistory = [];
+      paidIds = {};
+      merges = {};
+      orderMoves = {};
+      mergeSelection.clear();
+      localStorage.setItem(KEYS.paidIds, "{}");
+      localStorage.setItem(KEYS.merges, "{}");
+      localStorage.setItem(KEYS.moves, "{}");
       localStorage.setItem(KEYS.orders, "[]");
       localStorage.setItem(KEYS.staffCalls, "[]");
       localStorage.setItem(KEYS.tableClears, "{}");
@@ -1466,63 +1701,126 @@
       showToast("Đã xóa toàn bộ đơn và lịch sử");
     }
 
-    // ====== 9. HÓA ĐƠN & VIETQR TỰ ĐỘNG ======
-    async function openCustomerBillModal() {
-      // Kéo nhanh lịch sử 12h để đảm bảo khách thấy đủ cả đơn của bạn cùng bàn
-      await pullHistory12h(false);
-      openTableBillModal(currentTable, false);
+        // ====== 9. TÊN KHÁCH, HÓA ĐƠN & VIETQR TỰ ĐỘNG ======
+    const noAccent = (s) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
+
+    function deviceId() {
+      let id = localStorage.getItem(KEYS.deviceId);
+      if (!id) {
+        id = Math.random().toString(36).slice(2, 8);
+        localStorage.setItem(KEYS.deviceId, id);
+      }
+      return id;
     }
 
-    function openTableBillModal(tableNum, isOwnerView) {
-      const bills = getActiveTableBills();
-      const tb = bills.find(b => b.table === tableNum);
+    function getGuest(table = currentTable) {
+      const store = JSON.parse(localStorage.getItem(KEYS.guest) || "{}");
+      return store[table] || null;
+    }
 
-      document.getElementById("btnPrintBill").classList.toggle("hidden", !isOwnerView);
-      const qrBox = document.getElementById("vietqrSection");
+    function updateGuestBadge() {
+      const el = document.getElementById("custSub");
+      if (!el) return;
+      const g = getGuest();
+      el.textContent = g ? `Bàn ${currentTable} • ${g.name}` : "Chọn món bên dưới • Phục vụ tại bàn";
+    }
 
-      if (!tb) {
-        document.getElementById("billModalTitle").textContent = `🧾 Hóa đơn Bàn ${tableNum}`;
-        document.getElementById("billContent").innerHTML = `<div style="text-align:center; padding:12px 0; color:var(--slate);">Bàn ${esc(tableNum)} chưa có món nào đang phục vụ.</div>`;
-        qrBox.classList.add("hidden");
+    let pendingSubmitAfterName = false;
+    function showNameModal(thenSubmit) {
+      pendingSubmitAfterName = !!thenSubmit;
+      document.getElementById("nameModalTable").textContent = currentTable;
+      document.getElementById("guestNameInput").value = "";
+      document.getElementById("nameModal").classList.remove("hidden");
+      setTimeout(() => document.getElementById("guestNameInput").focus(), 100);
+    }
+
+    function confirmGuestName() {
+      const name = document.getElementById("guestNameInput").value.trim().replace(/\s+/g, " ").slice(0, 20);
+      if (!name) return showToast("Vui lòng nhập tên của bạn");
+      const store = JSON.parse(localStorage.getItem(KEYS.guest) || "{}");
+      store[currentTable] = { name };
+      localStorage.setItem(KEYS.guest, JSON.stringify(store));
+      document.getElementById("nameModal").classList.add("hidden");
+      updateGuestBadge();
+      if (pendingSubmitAfterName) {
+        pendingSubmitAfterName = false;
+        submitOrder();
+      }
+    }
+
+    async function openCustomerBillModal() {
+      await pullHistory12h(false);
+      const myKey = `${currentTable}_${deviceId()}`;
+      const u = buildUnits().find(x => x.groups.some(g => g.key === myKey));
+      if (!u) {
+        document.getElementById("btnPrintBill").classList.add("hidden");
+        document.getElementById("vietqrSection").classList.add("hidden");
+        document.getElementById("billModalTitle").textContent = "🧾 Hóa đơn của bạn";
+        document.getElementById("billContent").innerHTML = `<div style="text-align:center; padding:12px 0; color:var(--slate);">Bạn chưa gọi món nào (hoặc bill đã được thanh toán).</div>`;
         document.getElementById("billModal").classList.remove("hidden");
         return;
       }
+      showUnitBill(u, false);
+    }
 
-      const itemsList = Object.values(tb.mergedItems);
-      document.getElementById("billModalTitle").textContent = `🧾 Tổng Bill Bàn ${tableNum}`;
-      document.getElementById("billContent").innerHTML = `
-        <div style="text-align:center; font-weight:bold; margin-bottom:8px;">
-          BẾP NHÀ MÌNH<br/>PHIẾU THANH TOÁN - BÀN ${esc(tb.table)}
-        </div>
-        <div>Số lượt gọi: ${tb.orders.length} | Giờ gần nhất: ${esc(tb.latestTime)}</div>
-        <hr style="margin:8px 0; border:none; border-top:1px dashed #94a3b8;"/>
-        ${itemsList.map(i => `
+    function openUnitBillModal(uid, isOwnerView) {
+      const u = buildUnits().find(x => x.uid === uid);
+      if (!u) return showToast("Bill này không còn nữa");
+      showUnitBill(u, isOwnerView);
+    }
+
+    function openUnitBillByOrder(orderId) {
+      const o = orders.find(x => x.id === orderId);
+      if (!o) return;
+      const g = effGuest(o);
+      const key = `${o.table}_${g.guestId}`;
+      const u = buildUnits().find(x => x.groups.some(gr => gr.key === key));
+      if (!u) return showToast("Phiếu này đã được thanh toán");
+      showUnitBill(u, true);
+    }
+
+    function showUnitBill(u, isOwnerView) {
+      document.getElementById("btnPrintBill").classList.toggle("hidden", !isOwnerView);
+      const qrBox = document.getElementById("vietqrSection");
+      const isMerge = u.groups.length > 1;
+      document.getElementById("billModalTitle").textContent = isMerge ? "🧾 Bill gộp" : `🧾 Bill — ${u.groups[0].name}`;
+
+      const sections = u.groups.map(g => `
+        <div style="font-weight:bold; margin-top:4px;">👤 ${esc(g.name)} — Bàn ${esc(g.table)}</div>
+        ${Object.values(g.mergedItems).map(i => `
           <div style="display:flex; justify-content:space-between; margin:4px 0;">
             <span>${i.qty}x ${esc(i.name)}${i.optText ? ` (${esc(i.optText)})` : ""}</span>
             <span>${fmt(i.qty * i.price)}</span>
           </div>
         `).join("")}
+        ${isMerge ? `<div style="display:flex; justify-content:space-between; font-style:italic;"><span>Tạm tính</span><span>${fmt(g.total)}</span></div>` : ""}
+      `).join('<hr style="margin:8px 0; border:none; border-top:1px dashed #94a3b8;"/>');
+
+      document.getElementById("billContent").innerHTML = `
+        <div style="text-align:center; font-weight:bold; margin-bottom:8px;">
+          BẾP NHÀ MÌNH<br/>${isMerge ? "PHIẾU THANH TOÁN GỘP" : "PHIẾU THANH TOÁN"}
+        </div>
+        <hr style="margin:8px 0; border:none; border-top:1px dashed #94a3b8;"/>
+        ${sections}
         <hr style="margin:8px 0; border:none; border-top:1px dashed #94a3b8;"/>
         <div style="display:flex; justify-content:space-between; font-weight:bold; font-size:15px;">
-          <span>TỔNG THANH TOÁN:</span><span>${fmt(tb.total)}</span>
+          <span>TỔNG THANH TOÁN:</span><span>${fmt(u.total)}</span>
         </div>
       `;
 
-      // Tạo mã VietQR tự động
       if (settings.bankId && settings.accountNo) {
-        const addInfo = `TT BAN ${tb.table}`;
-        const qrUrl = `https://img.vietqr.io/image/${encodeURIComponent(settings.bankId)}-${encodeURIComponent(settings.accountNo)}-compact2.png?amount=${tb.total}&addInfo=${encodeURIComponent(addInfo)}&accountName=${encodeURIComponent(settings.accountName || "")}`;
+        const addInfo = unitQrInfo(u);
+        const qrUrl = `https://img.vietqr.io/image/${encodeURIComponent(settings.bankId)}-${encodeURIComponent(settings.accountNo)}-compact2.png?amount=${u.total}&addInfo=${encodeURIComponent(addInfo)}&accountName=${encodeURIComponent(settings.accountName || "")}`;
         document.getElementById("vietqrImg").src = qrUrl;
         document.getElementById("vietqrInfoText").innerHTML = `
           Ngân hàng: <b>${esc(settings.bankId)}</b> • STK: <b>${esc(settings.accountNo)}</b><br/>
           Chủ TK: <b>${esc(settings.accountName)}</b><br/>
-          Số tiền: <b style="color:var(--primary);">${fmt(tb.total)}</b> • Nội dung: <b>${esc(addInfo)}</b>
+          Số tiền: <b style="color:var(--primary);">${fmt(u.total)}</b> • Nội dung: <b>${esc(addInfo)}</b>
         `;
         qrBox.classList.remove("hidden");
       } else {
         qrBox.classList.add("hidden");
       }
-
       document.getElementById("billModal").classList.remove("hidden");
     }
 
@@ -1674,6 +1972,52 @@
         return;
       }
 
+      const paidMatch = msgText.match(/\[PAID:(\{.*\})\]/);
+      if (paidMatch) {
+        try {
+          const p = JSON.parse(paidMatch[1]);
+          applyPaid(p.recId, p.ids, p.label, p.paidAt);
+        } catch (e) {}
+        return;
+      }
+
+      const mergeMatch = msgText.match(/\[MERGE:(\{.*\})\]/);
+      if (mergeMatch) {
+        try {
+          const m = JSON.parse(mergeMatch[1]);
+          if (!merges[m.id]) {
+            merges[m.id] = m;
+            localStorage.setItem(KEYS.merges, JSON.stringify(merges));
+            if (!isCustomerQRMode) renderPosBoard();
+          }
+        } catch (e) {}
+        return;
+      }
+
+      const unmergeMatch = msgText.match(/\[UNMERGE:(\{.*\})\]/);
+      if (unmergeMatch) {
+        try {
+          const m = JSON.parse(unmergeMatch[1]);
+          merges[m.id] = { ...(merges[m.id] || { id: m.id, keys: [], ts: m.ts }), removed: true };
+          localStorage.setItem(KEYS.merges, JSON.stringify(merges));
+          if (!isCustomerQRMode) renderPosBoard();
+        } catch (e) {}
+        return;
+      }
+
+      const moveMatch = msgText.match(/\[MOVE:(\{.*\})\]/);
+      if (moveMatch) {
+        try {
+          const m = JSON.parse(moveMatch[1]);
+          if (!orderMoves[m.orderId] || (orderMoves[m.orderId].ts || 0) < m.ts) {
+            orderMoves[m.orderId] = m;
+            localStorage.setItem(KEYS.moves, JSON.stringify(orderMoves));
+            if (!isCustomerQRMode) renderPosBoard();
+          }
+        } catch (e) {}
+        return;
+      }
+
       const callMatch = msgText.match(/\[CALL:(\{.*\})\]/);
       if (callMatch && !isCustomerQRMode) {
         try {
@@ -1759,6 +2103,8 @@
         document.getElementById("tableSelect").classList.add("hidden");
         document.getElementById("tableBadgeFixed").classList.remove("hidden");
         switchTab("customer");
+        updateGuestBadge();
+        if (!getGuest()) showNameModal(false);
         // Kéo trạng thái tạm hết món & lịch sử bàn khi khách vừa mở
         pullHistory12h(false);
         connectNtfySSE();
