@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bếp Nhà Mình - Màn hình Chủ Quán</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- PIN Lock Screen -->
+  <div id="pinGate" class="pin-gate">
+    <div class="pin-box">
+      <div style="font-size:40px; margin-bottom:6px;">🔐</div>
+      <h2>Màn hình Chủ Quán</h2>
+      <p style="font-size:13px; color:var(--slate); margin-top:4px;">Nhập mã PIN để mở khóa nhận đơn & thu ngân</p>
+      <input type="password" inputmode="numeric" id="pinInput" class="pin-input" maxlength="10" placeholder="••••••" onkeydown="if(event.key==='Enter') checkPinUnlock()" />
+      <p id="pinError" class="hidden" style="color:var(--red); font-size:12px; font-weight:700; margin-bottom:10px;">Sai mã PIN, vui lòng thử lại!</p>
+      <button class="btn-checkout" style="width:100%; padding:13px;" onclick="checkPinUnlock()">Mở khóa</button>
+    </div>
+  </div>
+
+  <!-- Top Bar (Owner) -->
+  <header class="topbar" id="topbar">
+    <div class="brand">
+      🍜 Bếp Nhà Mình <span>CHỦ QUÁN</span>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-btn active" data-tab="owner" onclick="switchTab('owner')">🖥️ Màn hình Quán <span id="badgeNewCount"></span></button>
+      <button class="nav-btn" data-tab="history3" onclick="switchTab('history3')">📅 Lịch sử 3 ngày</button>
+      <button class="nav-btn" data-tab="qr" onclick="switchTab('qr')">📷 Mã QR Bàn</button>
+      <button class="nav-btn" onclick="lockWithPin()">🔒 Khóa</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <!-- OWNER POS VIEW -->
+    <div id="mainGrid" class="single-wide">
+      <section id="ownerSection" class="pos-panel">
+        <div class="pos-header">
+          <div class="pos-stats">
+            <div class="stat-box">Phiếu bếp <strong id="statOrders">0</strong></div>
+            <div class="stat-box">Chờ làm <strong id="statPending" style="color:var(--primary);">0</strong></div>
+            <div class="stat-box">Bàn đang ngồi <strong id="statActiveTables" style="color:var(--blue);">0</strong></div>
+            <div class="stat-box">Đang phục vụ <strong id="statServingRevenue" style="color:var(--amber);">0đ</strong></div>
+            <div class="stat-box">Đã thu hôm nay <strong id="statRevenue" style="color:var(--green);">0đ</strong></div>
+          </div>
+          <div class="pos-actions">
+            <button id="wakeLockBtn" class="btn-sm" onclick="toggleWakeLock()">☀️ Giữ sáng: TẮT</button>
+            <button id="soundToggleBtn" class="btn-sm sound-on" onclick="toggleSound()">🔔 Âm báo: BẬT</button>
+            <button class="btn-sm" onclick="pullHistory12h(true)">🔄 Kéo đơn 12h</button>
+            <button class="btn-sm" onclick="playTingTing(); showToast('Đã test chuông báo đơn!')">🔊 Test</button>
+            <button class="btn-sm" onclick="clearOrders()" style="color:var(--red);">🗑️ Xóa hết</button>
+          </div>
+        </div>
+
+        <div class="pos-subtabs">
+          <button class="pos-subtab active" data-postab="kitchen" onclick="switchPosTab('kitchen')">🔥 Phiếu báo bếp <span id="subBadgeKitchen"></span></button>
+          <button class="pos-subtab" data-postab="tables" onclick="switchPosTab('tables')">🧾 Tổng bill theo Bàn <span id="subBadgeTables"></span></button>
+          <button class="pos-subtab" data-postab="history" onclick="switchPosTab('history')">📜 Lịch sử đã phục vụ <span id="subBadgeHistory"></span></button>
+          <button class="pos-subtab" data-postab="soldout" onclick="switchPosTab('soldout')">🚫 Tạm hết món <span id="subBadgeSoldout"></span></button>
+        </div>
+
+        <div id="staffAlertsWrap" class="staff-alerts-wrap hidden"></div>
+        <div class="orders-board" id="ordersBoard"></div>
+      </section>
+    </div>
+
+    <!-- 3-DAY HISTORY PAGE -->
+    <section id="history3Section" class="single-wide hidden">
+      <div class="card-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h2>📅 Lịch sử doanh thu 3 ngày gần nhất</h2>
+            <p style="color:var(--slate); font-size:13px; margin-top:4px;">Tự động lưu giữ và thống kê chi tiết 3 ngày gần nhất trên máy quầy.</p>
+          </div>
+          <button class="btn-checkout" onclick="exportThreeDayReport()">📤 Tải báo cáo (.txt)</button>
+        </div>
+        <div id="history3Content"></div>
+      </div>
+    </section>
+
+    <!-- QR GENERATOR -->
+    <section id="qrSection" class="single-wide hidden">
+      <div class="card-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h2>📷 Tạo mã QR dán tại từng bàn</h2>
+            <p style="color:var(--slate); font-size:13px; margin-top:4px;">
+              Khách quét mã sẽ mở thẳng <b>chỉ riêng Menu của đúng bàn đó</b>.<br/>
+              Kênh đồng bộ hiện tại: <b id="qrTopicPreview"></b>
+            </p>
+          </div>
+          <button class="btn-checkout" onclick="window.print()">🖨️ In tất cả mã QR</button>
+        </div>
+        <div class="qr-grid" id="qrGrid"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Move Order Modal -->
+  <div id="moveModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeMoveModal()">
+    <div class="modal-box">
+      <h3 style="margin-bottom:8px;">↪ Đổi nhóm cho phiếu</h3>
+      <p id="moveInfoText" style="font-size:13px; color:var(--slate); line-height:1.5; margin-bottom:10px;"></p>
+      <select id="moveTargetSelect" class="input-field"></select>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-checkout" style="flex:1;" onclick="confirmMove()">Chuyển</button>
+        <button class="btn-sm" style="flex:1; justify-content:center;" onclick="closeMoveModal()">Hủy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bill & VietQR Modal -->
+  <div id="billModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeBillModal()">
+    <div class="modal-box">
+      <h3 id="billModalTitle">🧾 Hóa đơn & Thanh toán</h3>
+      <div id="billContent" class="receipt"></div>
+      <div id="vietqrSection" class="vietqr-box hidden">
+        <div style="font-size:13px; font-weight:700; color:var(--dark);">Quét mã VietQR để thanh toán</div>
+        <img id="vietqrImg" class="vietqr-img" src="" alt="Mã VietQR thanh toán" />
+        <div id="vietqrInfoText" style="font-size:12px; color:var(--slate); line-height:1.5;"></div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button id="btnPrintBill" class="btn-checkout" style="flex:1;" onclick="window.print()">🖨️ In Bill</button>
+        <button class="btn-sm" style="flex:1; justify-content:center;" onclick="closeBillModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>window.APP_MODE = "owner";</script>
+  <script src="app.js"></script>
+</body>
+</html>
