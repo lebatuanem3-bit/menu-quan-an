@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bếp Nhà Mình - Quản trị hệ thống</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- PIN Lock Screen -->
+  <div id="pinGate" class="pin-gate">
+    <div class="pin-box">
+      <div style="font-size:40px; margin-bottom:6px;">🛠️</div>
+      <h2>Trang Quản Trị Phần Mềm</h2>
+      <p style="font-size:13px; color:var(--slate); margin-top:4px;">Nhập mã PIN để truy cập quản lý chung (Khách & Quán)</p>
+      <input type="password" inputmode="numeric" id="pinInput" class="pin-input" maxlength="10" placeholder="••••••" onkeydown="if(event.key==='Enter') checkPinUnlock()" />
+      <p id="pinError" class="hidden" style="color:var(--red); font-size:12px; font-weight:700; margin-bottom:10px;">Sai mã PIN, vui lòng thử lại!</p>
+      <button class="btn-checkout" style="width:100%; padding:13px;" onclick="checkPinUnlock()">Mở khóa</button>
+    </div>
+  </div>
+
+  <!-- Top Bar (Admin) -->
+  <header class="topbar" id="topbar">
+    <div class="brand">
+      🍜 Bếp Nhà Mình <span>QUẢN TRỊ VIÊN</span>
+    </div>
+    <div class="nav-tabs">
+      <button class="nav-btn active" data-tab="split" onclick="switchTab('split')">📱 Song song</button>
+      <button class="nav-btn" data-tab="customer" onclick="switchTab('customer')">🛒 Khách</button>
+      <button class="nav-btn" data-tab="owner" onclick="switchTab('owner')">🖥️ Quán <span id="badgeNewCount"></span></button>
+      <button class="nav-btn" data-tab="history3" onclick="switchTab('history3')">📅 Lịch sử 3 ngày</button>
+      <button class="nav-btn" data-tab="qr" onclick="switchTab('qr')">📷 Mã QR Bàn</button>
+      <button class="nav-btn" data-tab="sync" onclick="switchTab('sync')">⚙️ Cài đặt Quán & VietQR</button>
+      <button class="nav-btn" onclick="lockWithPin()">🔒 Khóa</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <!-- SPLIT / CUSTOMER / OWNER CONTAINER -->
+    <div id="mainGrid" class="split-grid">
+
+      <!-- CUSTOMER VIEW -->
+      <section id="customerSection" class="phone-frame">
+        <div class="cust-header">
+          <div>
+            <h2>🍜 Bếp Nhà Mình</h2>
+            <small id="custSub">Chọn món bên dưới • Phục vụ tại bàn</small>
+          </div>
+          <div class="cust-header-right">
+            <select id="tableSelect" class="table-select" onchange="changeTable(this.value)"></select>
+            <span id="tableBadgeFixed" class="table-badge-fixed hidden">Bàn 01</span>
+          </div>
+        </div>
+
+        <div class="cust-actions-strip">
+          <button id="btnCallStaff" class="strip-btn" onclick="openCallStaffModal()">🔔 Gọi nhân viên</button>
+          <button class="strip-btn pay" onclick="openCustomerBillModal()">💳 Hóa đơn & VietQR</button>
+        </div>
+
+        <div class="cat-bar" id="catBar"></div>
+        <div class="menu-list" id="menuList"></div>
+
+        <div class="cart-bar">
+          <div class="cart-summary">
+            <span id="cartCountText">Chưa chọn món nào</span>
+            <strong id="cartTotalText">0đ</strong>
+          </div>
+          <button id="openCartBtn" class="btn-checkout" disabled onclick="toggleCartDrawer(true)">Xem giỏ & Đặt</button>
+        </div>
+
+        <!-- Cart Drawer -->
+        <div id="cartDrawer" class="cart-drawer hidden" onclick="if(event.target===this) toggleCartDrawer(false)">
+          <div class="drawer-sheet">
+            <div class="drawer-head">
+              <strong>Giỏ hàng — Bàn <span id="drawerTableNum">01</span></strong>
+              <button class="btn-sm" onclick="toggleCartDrawer(false)">✕ Đóng</button>
+            </div>
+            <div class="drawer-items" id="cartItemsList"></div>
+            <input type="text" id="orderNote" class="note-input" placeholder="Ghi chú thêm cho bếp (VD: không hành, ít cay...)" />
+            <div style="display:flex; justify-content:space-between; font-weight:700; margin-bottom:12px;">
+              <span>Tổng đợt này:</span>
+              <span id="drawerTotal" style="color:var(--primary); font-size:17px;">0đ</span>
+            </div>
+            <button id="btnSubmitOrder" class="btn-checkout" style="width:100%; padding:13px;" onclick="submitOrder()">🚀 GỬI ĐƠN XUỐNG BẾP</button>
+          </div>
+        </div>
+
+        <!-- Item Options Bottom Sheet -->
+        <div id="optionsDrawer" class="cart-drawer hidden" onclick="if(event.target===this) closeOptionsDrawer()">
+          <div class="drawer-sheet">
+            <div class="drawer-head">
+              <strong id="optItemTitle">Tùy chọn món</strong>
+              <button class="btn-sm" onclick="closeOptionsDrawer()">✕ Đóng</button>
+            </div>
+            <div id="optGroupsContainer" style="overflow-y:auto; max-height:55vh; padding-bottom:8px;"></div>
+            <button id="btnConfirmOptions" class="btn-checkout" style="width:100%; padding:13px;" onclick="confirmAddWithOptions()">Thêm vào giỏ</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- OWNER POS VIEW -->
+      <section id="ownerSection" class="pos-panel">
+        <div class="pos-header">
+          <div class="pos-stats">
+            <div class="stat-box">Phiếu bếp <strong id="statOrders">0</strong></div>
+            <div class="stat-box">Chờ làm <strong id="statPending" style="color:var(--primary);">0</strong></div>
+            <div class="stat-box">Bàn đang ngồi <strong id="statActiveTables" style="color:var(--blue);">0</strong></div>
+            <div class="stat-box">Đang phục vụ <strong id="statServingRevenue" style="color:var(--amber);">0đ</strong></div>
+            <div class="stat-box">Đã thu hôm nay <strong id="statRevenue" style="color:var(--green);">0đ</strong></div>
+          </div>
+          <div class="pos-actions">
+            <button id="wakeLockBtn" class="btn-sm" onclick="toggleWakeLock()">☀️ Giữ sáng: TẮT</button>
+            <button id="soundToggleBtn" class="btn-sm sound-on" onclick="toggleSound()">🔔 Âm báo: BẬT</button>
+            <button class="btn-sm" onclick="pullHistory12h(true)">🔄 Kéo đơn 12h</button>
+            <button class="btn-sm" onclick="playTingTing(); showToast('Đã test chuông báo đơn!')">🔊 Test</button>
+            <button class="btn-sm" onclick="clearOrders()" style="color:var(--red);">🗑️ Xóa hết</button>
+          </div>
+        </div>
+
+        <div class="pos-subtabs">
+          <button class="pos-subtab active" data-postab="kitchen" onclick="switchPosTab('kitchen')">🔥 Phiếu báo bếp <span id="subBadgeKitchen"></span></button>
+          <button class="pos-subtab" data-postab="tables" onclick="switchPosTab('tables')">🧾 Tổng bill theo Bàn <span id="subBadgeTables"></span></button>
+          <button class="pos-subtab" data-postab="history" onclick="switchPosTab('history')">📜 Lịch sử đã phục vụ <span id="subBadgeHistory"></span></button>
+          <button class="pos-subtab" data-postab="soldout" onclick="switchPosTab('soldout')">🚫 Tạm hết món <span id="subBadgeSoldout"></span></button>
+        </div>
+
+        <div id="staffAlertsWrap" class="staff-alerts-wrap hidden"></div>
+        <div class="orders-board" id="ordersBoard"></div>
+      </section>
+
+    </div>
+
+    <!-- 3-DAY HISTORY PAGE -->
+    <section id="history3Section" class="single-wide hidden">
+      <div class="card-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h2>📅 Lịch sử doanh thu 3 ngày gần nhất</h2>
+            <p style="color:var(--slate); font-size:13px; margin-top:4px;">Tự động lưu giữ và thống kê chi tiết 3 ngày gần nhất (Hôm nay, Hôm qua, Hôm kia).</p>
+          </div>
+          <button class="btn-checkout" onclick="exportThreeDayReport()">📤 Tải báo cáo (.txt)</button>
+        </div>
+        <div id="history3Content"></div>
+      </div>
+    </section>
+
+    <!-- QR GENERATOR -->
+    <section id="qrSection" class="single-wide hidden">
+      <div class="card-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h2>📷 Tạo mã QR dán tại từng bàn</h2>
+            <p style="color:var(--slate); font-size:13px; margin-top:4px;">
+              Khách quét mã sẽ mở thẳng <b>chỉ riêng Menu của đúng bàn đó</b> (trỏ về <code>index.html</code>).<br/>
+              Kênh đồng bộ hiện tại: <b id="qrTopicPreview"></b>
+            </p>
+          </div>
+          <button class="btn-checkout" onclick="window.print()">🖨️ In tất cả mã QR</button>
+        </div>
+        <div class="qr-grid" id="qrGrid"></div>
+      </div>
+    </section>
+
+    <!-- SETTINGS (NTFY + VIETQR) -->
+    <section id="syncSection" class="single-wrap hidden">
+      <div class="card-box">
+        <h2>⚙️ Cài đặt Quán & Chuyển khoản VietQR</h2>
+        <p style="color:var(--slate); font-size:13px; margin:6px 0 14px; line-height:1.5;">
+          Cấu hình mặc định đang nằm trong <code>config.js</code>. Bạn có thể ghi đè nhanh tại đây:
+        </p>
+
+        <label style="font-size:13px; font-weight:700;">📡 Mã kênh quán (Topic ntfy.sh):</label>
+        <input type="text" id="ntfyTopicInput" class="input-field" placeholder="VD: bepnhaminh-pos-2026" />
+
+        <hr style="border:none; border-top:1px dashed var(--border); margin:12px 0 14px;" />
+        <h3 style="font-size:15px; margin-bottom:10px;">💳 Tài khoản ngân hàng nhận VietQR</h3>
+
+        <label style="font-size:13px; font-weight:700;">Ngân hàng nhận tiền:</label>
+        <select id="bankIdInput" class="input-field" onchange="updateVietQRPreview()">
+          <option value="OCB">OCB - Ngân hàng Phương Đông</option>
+          <option value="MB">MB - Ngân hàng Quân Đội (MBBank)</option>
+          <option value="VCB">VCB - Vietcombank</option>
+          <option value="TCB">TCB - Techcombank</option>
+          <option value="BIDV">BIDV - Đầu tư & Phát triển</option>
+          <option value="ICB">VietinBank (ICB)</option>
+          <option value="ACB">ACB - Ngân hàng Á Châu</option>
+          <option value="VPB">VPBank</option>
+          <option value="TPB">TPBank</option>
+          <option value="VBA">Agribank</option>
+          <option value="STB">Sacombank</option>
+          <option value="VIB">VIB</option>
+          <option value="HDB">HDBank</option>
+          <option value="MSB">MSB - Hàng Hải</option>
+          <option value="SHB">SHB</option>
+          <option value="CAKE">CAKE by VPBank</option>
+        </select>
+
+        <label style="font-size:13px; font-weight:700;">Số tài khoản:</label>
+        <input type="text" id="bankAccInput" class="input-field" placeholder="VD: 0987846022" oninput="updateVietQRPreview()" />
+
+        <label style="font-size:13px; font-weight:700;">Tên chủ tài khoản (không dấu):</label>
+        <input type="text" id="bankNameInput" class="input-field" placeholder="VD: LE BA TUAN" oninput="updateVietQRPreview()" />
+
+        <div id="vietqrPreviewBox" class="vietqr-box" style="margin-bottom:14px; text-align:center;">
+          <div style="font-size:12px; font-weight:700; color:var(--slate);">Xem trước mã VietQR (mẫu 10.000đ)</div>
+          <img id="vietqrPreviewImg" class="vietqr-img" src="" alt="Xem trước VietQR" />
+          <div id="vietqrPreviewText" style="font-size:12px; color:var(--slate);"></div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-top:6px;">
+          <button class="btn-checkout" style="flex:1;" onclick="saveSettings()">💾 Lưu cài đặt & Đồng bộ sang ĐT khách</button>
+          <button class="btn-sm" onclick="resetDefaultSettings()">Khôi phục mặc định</button>
+        </div>
+        <p id="syncStatusText" style="margin-top:12px; font-size:13px; color:var(--slate);"></p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Order Success Modal -->
+  <div id="successModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeSuccessModal()">
+    <div class="modal-box">
+      <div style="font-size:48px; margin-bottom:8px;">✅</div>
+      <h3 style="color:var(--green); margin-bottom:6px;">Đã gửi đơn xuống bếp!</h3>
+      <p id="successMsg" style="font-size:14px; color:var(--slate); line-height:1.5; margin-bottom:16px;"></p>
+      <button class="btn-checkout" style="width:100%;" onclick="closeSuccessModal()">Gọi thêm món khác</button>
+    </div>
+  </div>
+
+  <!-- Guest Name Modal -->
+  <div id="nameModal" class="modal-backdrop hidden" style="z-index:250;">
+    <div class="modal-box">
+      <div style="font-size:42px; margin-bottom:6px;">👋</div>
+      <h3 style="margin-bottom:6px;">Chào mừng đến Bếp Nhà Mình!</h3>
+      <p style="font-size:13px; color:var(--slate); line-height:1.5; margin-bottom:12px;">
+        Bạn đang ngồi <b>Bàn <span id="nameModalTable">01</span></b>.<br/>Vui lòng nhập tên để quán biết ai gọi món và thanh toán đúng nhóm:
+      </p>
+      <input type="text" id="guestNameInput" class="input-field" maxlength="20" placeholder="VD: Anh Tuấn" style="font-size:16px; text-align:center;" onkeydown="if(event.key==='Enter') confirmGuestName()" />
+      <button class="btn-checkout" style="width:100%; padding:13px;" onclick="confirmGuestName()">Bắt đầu gọi món</button>
+    </div>
+  </div>
+
+  <!-- Move Order Modal -->
+  <div id="moveModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeMoveModal()">
+    <div class="modal-box">
+      <h3 style="margin-bottom:8px;">↪ Đổi nhóm cho phiếu</h3>
+      <p id="moveInfoText" style="font-size:13px; color:var(--slate); line-height:1.5; margin-bottom:10px;"></p>
+      <select id="moveTargetSelect" class="input-field"></select>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-checkout" style="flex:1;" onclick="confirmMove()">Chuyển</button>
+        <button class="btn-sm" style="flex:1; justify-content:center;" onclick="closeMoveModal()">Hủy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Call Staff Modal -->
+  <div id="callStaffModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeCallStaffModal()">
+    <div class="modal-box">
+      <h3 style="margin-bottom:6px;">🔔 Gọi nhân viên — Bàn <span id="callTableNum">01</span></h3>
+      <p style="font-size:13px; color:var(--slate); margin-bottom:14px;">Chọn nhanh yêu cầu để quầy phục vụ hỗ trợ ngay:</p>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn-checkout" onclick="sendStaffCall('Xin thêm đá / nước lọc')">🧊 Xin thêm đá / nước lọc</button>
+        <button class="btn-checkout" style="background:var(--blue);" onclick="sendStaffCall('Xin thêm giấy ăn / chén đũa')">🧻 Xin thêm giấy ăn / chén đũa</button>
+        <button class="btn-checkout" style="background:var(--amber);" onclick="sendStaffCall('Cần nhân viên hỗ trợ tại bàn')">🙋 Cần nhân viên hỗ trợ</button>
+        <button class="btn-checkout" style="background:var(--green);" onclick="sendStaffCall('Gọi tính tiền tại bàn')">💵 Tính tiền tại bàn</button>
+        <button class="btn-sm" style="justify-content:center; padding:10px;" onclick="closeCallStaffModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bill & VietQR Modal -->
+  <div id="billModal" class="modal-backdrop hidden" onclick="if(event.target===this) closeBillModal()">
+    <div class="modal-box">
+      <h3 id="billModalTitle">🧾 Hóa đơn & Thanh toán</h3>
+      <div id="billContent" class="receipt"></div>
+      <div id="vietqrSection" class="vietqr-box hidden">
+        <div style="font-size:13px; font-weight:700; color:var(--dark);">Quét mã VietQR để thanh toán</div>
+        <img id="vietqrImg" class="vietqr-img" src="" alt="Mã VietQR thanh toán" />
+        <div id="vietqrInfoText" style="font-size:12px; color:var(--slate); line-height:1.5;"></div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button id="btnPrintBill" class="btn-checkout" style="flex:1;" onclick="window.print()">🖨️ In Bill</button>
+        <button class="btn-sm" style="flex:1; justify-content:center;" onclick="closeBillModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script>window.APP_MODE = "admin";</script>
+  <script src="app.js"></script>
+</body>
+</html>
